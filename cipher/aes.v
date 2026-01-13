@@ -21,7 +21,7 @@ mut:
 // Example:
 // ```v
 // key := rand.generate_key(256)! // 32 bytes for AES-256
-// mut cipher := cipher.new_aes_cipher(key, .gcm)!
+// mut cipher := cipher.new_aes_cipher(key, .cbc)!
 // ```
 pub fn new_aes_cipher(key []u8, mode CipherMode) !AESCipher {
 	if key.len != 16 && key.len != 24 && key.len != 32 {
@@ -34,6 +34,10 @@ pub fn new_aes_cipher(key []u8, mode CipherMode) !AESCipher {
 		else { 16 } // Other modes use 16-byte IV
 	}
 	iv := rand.generate_iv(iv_size)!
+
+	if mode == .gcm {
+		return error('GCM mode not yet implemented in Phase 1')
+	}
 
 	return AESCipher{
 		mode: mode
@@ -51,7 +55,7 @@ pub fn new_aes_cipher(key []u8, mode CipherMode) !AESCipher {
 // ciphertext := cipher.encrypt(plaintext)!
 // ```
 pub fn new_aes_gcm(key []u8) !AESCipher {
-	return new_aes_cipher(key, .gcm)
+	return error('GCM mode not yet implemented in Phase 1')
 }
 
 // new_aes_cbc creates a new AES-CBC cipher.
@@ -126,37 +130,12 @@ pub fn (mut c AESCipher) decrypt(ciphertext []u8) ![]u8 {
 
 // encrypt_gcm encrypts using AES-GCM (authenticated encryption)
 fn (mut c AESCipher) encrypt_gcm(plaintext []u8) ![]u8 {
-	block := aes.new_cipher(c.key)
-	gcm := crypto_cipher.new_gcm(block)!
-
-	// Prepend nonce to ciphertext
-	mut result := []u8{len: c.iv.len + plaintext.len + 16} // nonce + ciphertext + tag
-	copy(mut result, c.iv)
-
-	sealed := gcm.seal(c.iv, plaintext)
-	copy(mut result[c.iv.len..], sealed)
-
-	// Generate new IV for next encryption
-	c.iv = rand.generate_iv(12)!
-
-	return result
+	return error('GCM mode not implemented')
 }
 
 // decrypt_gcm decrypts using AES-GCM (authenticated encryption)
 fn (mut c AESCipher) decrypt_gcm(ciphertext []u8) ![]u8 {
-	if ciphertext.len < 12 + 16 {
-		return error('ciphertext too short for GCM')
-	}
-
-	// Extract nonce from ciphertext
-	nonce := ciphertext[..12]
-	encrypted := ciphertext[12..]
-
-	block := aes.new_cipher(c.key)
-	gcm := crypto_cipher.new_gcm(block)!
-
-	plaintext := gcm.open(nonce, encrypted)!
-	return plaintext
+	return error('GCM mode not implemented')
 }
 
 // encrypt_cbc encrypts using AES-CBC
@@ -165,7 +144,7 @@ fn (mut c AESCipher) encrypt_cbc(plaintext []u8) ![]u8 {
 	padded := utils.pkcs7_pad(plaintext, 16)
 
 	block := aes.new_cipher(c.key)
-	mode := crypto_cipher.new_cbc(block, c.iv)
+	mut mode := crypto_cipher.new_cbc(block, c.iv)
 
 	mut ciphertext := []u8{len: c.iv.len + padded.len}
 	copy(mut ciphertext, c.iv)
@@ -193,7 +172,7 @@ fn (mut c AESCipher) decrypt_cbc(ciphertext []u8) ![]u8 {
 	}
 
 	block := aes.new_cipher(c.key)
-	mode := crypto_cipher.new_cbc(block, iv)
+	mut mode := crypto_cipher.new_cbc(block, iv)
 
 	mut plaintext := []u8{len: encrypted.len}
 	mode.decrypt_blocks(mut plaintext, encrypted)
@@ -205,7 +184,7 @@ fn (mut c AESCipher) decrypt_cbc(ciphertext []u8) ![]u8 {
 // encrypt_ctr encrypts using AES-CTR
 fn (mut c AESCipher) encrypt_ctr(plaintext []u8) ![]u8 {
 	block := aes.new_cipher(c.key)
-	stream := crypto_cipher.new_ctr(block, c.iv)
+	mut stream := crypto_cipher.new_ctr(block, c.iv)
 
 	mut ciphertext := []u8{len: c.iv.len + plaintext.len}
 	copy(mut ciphertext, c.iv)
@@ -229,7 +208,7 @@ fn (mut c AESCipher) decrypt_ctr(ciphertext []u8) ![]u8 {
 	encrypted := ciphertext[16..]
 
 	block := aes.new_cipher(c.key)
-	stream := crypto_cipher.new_ctr(block, iv)
+	mut stream := crypto_cipher.new_ctr(block, iv)
 
 	mut plaintext := []u8{len: encrypted.len}
 	stream.xor_key_stream(mut plaintext, encrypted)
@@ -271,48 +250,25 @@ pub fn (mut c AESCipher) decrypt_file(input_path string, output_path string) ! {
 
 // Convenience functions for common use cases
 
-// encrypt_aes_256_gcm encrypts data using AES-256-GCM.
+// encrypt_aes_256_cbc encrypts data using AES-256-CBC.
 //
 // Example:
 // ```v
 // key := rand.generate_key(256)!
-// ciphertext := cipher.encrypt_aes_256_gcm(key, plaintext)!
+// ciphertext := cipher.encrypt_aes_256_cbc(key, plaintext)!
 // ```
-pub fn encrypt_aes_256_gcm(key []u8, plaintext []u8) ![]u8 {
-	mut c := new_aes_gcm(key)!
+pub fn encrypt_aes_256_cbc(key []u8, plaintext []u8) ![]u8 {
+	mut c := new_aes_cbc(key)!
 	return c.encrypt(plaintext)
 }
 
-// decrypt_aes_256_gcm decrypts data using AES-256-GCM.
+// decrypt_aes_256_cbc decrypts data using AES-256-CBC.
 //
 // Example:
 // ```v
-// plaintext := cipher.decrypt_aes_256_gcm(key, ciphertext)!
+// plaintext := cipher.decrypt_aes_256_cbc(key, ciphertext)!
 // ```
-pub fn decrypt_aes_256_gcm(key []u8, ciphertext []u8) ![]u8 {
-	mut c := new_aes_gcm(key)!
+pub fn decrypt_aes_256_cbc(key []u8, ciphertext []u8) ![]u8 {
+	mut c := new_aes_cbc(key)!
 	return c.decrypt(ciphertext)
-}
-
-// encrypt_file_aes_gcm encrypts a file using AES-GCM.
-//
-// Example:
-// ```v
-// key := rand.generate_key(256)!
-// cipher.encrypt_file_aes_gcm(key, 'input.txt', 'output.enc')!
-// ```
-pub fn encrypt_file_aes_gcm(key []u8, input_path string, output_path string) ! {
-	mut c := new_aes_gcm(key)!
-	c.encrypt_file(input_path, output_path)!
-}
-
-// decrypt_file_aes_gcm decrypts a file using AES-GCM.
-//
-// Example:
-// ```v
-// cipher.decrypt_file_aes_gcm(key, 'output.enc', 'decrypted.txt')!
-// ```
-pub fn decrypt_file_aes_gcm(key []u8, input_path string, output_path string) ! {
-	mut c := new_aes_gcm(key)!
-	c.decrypt_file(input_path, output_path)!
 }

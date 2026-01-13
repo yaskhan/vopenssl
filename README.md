@@ -17,13 +17,15 @@ VOpenSSL provides a comprehensive, easy-to-use cryptographic library for V that 
 ### Current (Phase 1)
 
 - ✅ **Random Number Generation**: Cryptographically secure random bytes, keys, and IVs
-- ✅ **Hashing**: SHA-1, SHA-256, SHA-512, BLAKE2b, BLAKE2s, BLAKE3, MD5
+- ✅ **Hashing**: SHA-1, SHA-256, SHA-512, BLAKE2b, BLAKE2s, MD5 (One-shot wrappers)
 - ✅ **HMAC**: Message authentication codes with all hash algorithms
-- ✅ **Symmetric Encryption**: AES with multiple modes (CBC, CTR, GCM)
+- ✅ **Symmetric Encryption**: AES with CBC and CTR modes
 - ✅ **Utilities**: Padding, hex encoding, constant-time operations
 
 ### Planned (Future Phases)
 
+- 🔄 **Authenticated Encryption**: AES-GCM
+- 🔄 **Incremental Hashing**: Streaming API for hashes and MACs
 - 🔄 **Asymmetric Crypto**: RSA, ECDSA, ECDH, Ed25519
 - 🔄 **X.509 Certificates**: Parsing, validation, CSR creation
 - 🔄 **TLS/SSL**: TLS 1.2 and 1.3 client/server
@@ -48,21 +50,16 @@ dependencies: ['vopenssl']
 
 ```v
 import vopenssl.hash
+import vopenssl.utils
 
 // Hash a string
 data := 'Hello, World!'.bytes()
 hash_result := hash.sha256(data)
-println('SHA-256: ${hash_result.hex()}')
+println('SHA-256: ${utils.hex(hash_result)}')
 
 // Hash a file
 file_hash := hash.sha256_file('document.pdf')!
-println('File SHA-256: ${file_hash.hex()}')
-
-// Incremental hashing
-mut hasher := hash.new_sha256()
-hasher.write('Part 1'.bytes())
-hasher.write('Part 2'.bytes())
-final_hash := hasher.sum()
+println('File SHA-256: ${utils.hex(file_hash)}')
 ```
 
 ### HMAC
@@ -90,9 +87,9 @@ import vopenssl.rand
 // Generate a random key
 key := rand.generate_key(256)! // 256-bit AES key
 
-// Encrypt data
+// Encrypt data (using AES-CBC)
 plaintext := 'Secret message'.bytes()
-mut aes := cipher.new_aes_gcm(key)!
+mut aes := cipher.new_aes_cbc(key)!
 ciphertext := aes.encrypt(plaintext)!
 
 // Decrypt data
@@ -100,8 +97,9 @@ decrypted := aes.decrypt(ciphertext)!
 println('Decrypted: ${decrypted.bytestr()}')
 
 // Encrypt a file
-cipher.encrypt_file_aes_gcm(key, 'input.txt', 'output.enc')!
-cipher.decrypt_file_aes_gcm(key, 'output.enc', 'decrypted.txt')!
+mut file_aes := cipher.new_aes_cbc(key)!
+file_aes.encrypt_file('input.txt', 'output.enc')!
+file_aes.decrypt_file('output.enc', 'decrypted.txt')!
 ```
 
 ### Random Number Generation
@@ -142,7 +140,7 @@ Full API documentation is available at: [docs link]
 See the `examples/` directory for complete working examples:
 
 - `hash_file.v` - File hashing with different algorithms
-- `encrypt_file.v` - AES-GCM file encryption/decryption
+- `encrypt_file.v` - AES-CBC file encryption/decryption
 - `hmac_example.v` - HMAC generation and verification
 
 ## Development Status

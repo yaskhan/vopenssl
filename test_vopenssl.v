@@ -37,9 +37,9 @@ fn main() {
 	println('✓ HMAC test passed\n')
 	
 	// Test 4: AES Encryption
-	println('Test 4: AES-256-GCM Encryption')
-	plaintext := 'Secret data'.bytes()
-	mut aes := cipher.new_aes_gcm(key) or {
+	println('Test 4: AES-256-CBC Encryption')
+	plaintext := 'Secret data to be encrypted with CBC'.bytes()
+	mut aes := cipher.new_aes_cbc(key) or {
 		eprintln('Error: ${err}')
 		return
 	}
@@ -47,7 +47,7 @@ fn main() {
 		eprintln('Error: ${err}')
 		return
 	}
-	println('Plaintext: Secret data')
+	println('Plaintext: Secret data to be encrypted with CBC')
 	println('Ciphertext length: ${ciphertext.len} bytes')
 	
 	decrypted := aes.decrypt(ciphertext) or {
@@ -57,6 +57,7 @@ fn main() {
 	println('Decrypted: ${decrypted.bytestr()}')
 	println('Match: ${decrypted.bytestr() == plaintext.bytestr()}')
 	println('✓ Encryption test passed\n')
+
 	
 	println('=== All Tests Passed! ===')
 }
