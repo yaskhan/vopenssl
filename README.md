@@ -102,6 +102,21 @@ file_aes.encrypt_file('input.txt', 'output.enc')!
 file_aes.decrypt_file('output.enc', 'decrypted.txt')!
 ```
 
+### Encoding
+
+```v
+import vopenssl.encoding
+
+// Base64
+encoded := encoding.base64_encode('Hello'.bytes())
+decoded := encoding.base64_decode(encoded)!
+
+// PEM
+pem_str := encoding.pem_encode('PRIVATE KEY', {}, key_bytes)
+block := encoding.pem_decode(pem_str)!
+println('Type: ${block.type_}')
+```
+
 ### Random Number Generation
 
 ```v
@@ -128,6 +143,7 @@ vopenssl/
 ├── hash/          # Hashing algorithms (SHA, BLAKE, MD5)
 ├── mac/           # HMAC and message authentication
 ├── cipher/        # Symmetric encryption (AES, modes)
+├── encoding/      # Encoding (Base64, PEM, ASN.1)
 └── utils/         # Utilities (padding, hex, etc.)
 ```
 
