@@ -10,7 +10,9 @@ import os
 // Поддерживаем только те алгоритмы, которые есть в vlib/crypto
 pub enum HashAlgorithm {
 	sha1
+	sha224
 	sha256
+	sha384
 	sha512
 	md5
 }
@@ -19,7 +21,9 @@ pub enum HashAlgorithm {
 pub fn hash_bytes(data []u8, algorithm HashAlgorithm) []u8 {
 	match algorithm {
 		.sha1 { return sha1.sum(data) }
+		.sha224 { return sha512.sum512_224(data) }
 		.sha256 { return sha256.sum256(data) }
+		.sha384 { return sha512.sum384(data) }
 		.sha512 { return sha512.sum512(data) }
 		.md5 { return md5.sum(data) }
 	}
@@ -35,7 +39,9 @@ pub fn hash_file(path string, algorithm HashAlgorithm) ![]u8 {
 pub fn get_hash_length(algorithm HashAlgorithm) int {
 	match algorithm {
 		.sha1 { return 20 }
+		.sha224 { return 28 }
 		.sha256 { return 32 }
+		.sha384 { return 48 }
 		.sha512 { return 64 }
 		.md5 { return 16 }
 	}
@@ -48,13 +54,25 @@ pub fn get_hash_oid(algorithm HashAlgorithm) []u8 {
 			// 1.3.14.3.2.26
 			return [u8(0x2b), u8(0x0e), u8(0x03), u8(0x02), u8(0x1a)]
 		}
+		.sha224 {
+			// 2.16.840.1.101.3.4.2.4
+			return [u8(0x60), u8(0x86), u8(0x48), u8(0x01), u8(0x65), u8(0x03), u8(0x04), u8(0x02),
+				u8(0x04)]
+		}
 		.sha256 {
 			// 2.16.840.1.101.3.4.2.1
-			return [u8(0x60), u8(0x86), u8(0x48), u8(0x01), u8(0x65), u8(0x03), u8(0x04), u8(0x02), u8(0x01)]
+			return [u8(0x60), u8(0x86), u8(0x48), u8(0x01), u8(0x65), u8(0x03), u8(0x04), u8(0x02),
+				u8(0x01)]
+		}
+		.sha384 {
+			// 2.16.840.1.101.3.4.2.2
+			return [u8(0x60), u8(0x86), u8(0x48), u8(0x01), u8(0x65), u8(0x03), u8(0x04), u8(0x02),
+				u8(0x02)]
 		}
 		.sha512 {
 			// 2.16.840.1.101.3.4.2.3
-			return [u8(0x60), u8(0x86), u8(0x48), u8(0x01), u8(0x65), u8(0x03), u8(0x04), u8(0x02), u8(0x03)]
+			return [u8(0x60), u8(0x86), u8(0x48), u8(0x01), u8(0x65), u8(0x03), u8(0x04), u8(0x02),
+				u8(0x03)]
 		}
 		.md5 {
 			// 1.2.840.113549.2.5
