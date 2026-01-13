@@ -13,7 +13,7 @@ fn main() {
 		ecc.EllipticCurve.secp384r1,
 		ecc.EllipticCurve.secp521r1,
 		ecc.EllipticCurve.x25519,
-		ecc.EllipticCurve.ed25519
+		ecc.EllipticCurve.ed25519,
 	]
 
 	for curve in curves {
@@ -42,14 +42,14 @@ fn main() {
 		return
 	}
 	println('   Generated Ed25519 keys')
-	
+
 	message := 'Test message'.bytes()
 	signature := ecc.ed25519_sign(key_pair.private, message) or {
 		eprintln('   Sign error: ${err}')
 		return
 	}
 	println('   Signed: ${utils.hex(signature)[..32]}...')
-	
+
 	valid := ecc.ed25519_verify(key_pair.public, message, signature) or {
 		eprintln('   Verify error: ${err}')
 		return

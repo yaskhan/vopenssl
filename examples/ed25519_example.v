@@ -19,7 +19,7 @@ fn main() {
 	message := 'This is a secret message that needs to be signed'.bytes()
 	println('\n2. Signing message...')
 	println('   Message: ${message.bytestr()}')
-	
+
 	signature := ed25519.sign(key_pair.private, message) or {
 		eprintln('Error: ${err}')
 		return

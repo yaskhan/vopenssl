@@ -14,23 +14,23 @@ VOpenSSL provides a comprehensive, easy-to-use cryptographic library for V that 
 
 ## Features
 
-### Current (Phase 1)
+### Current (Phase 1-5)
 
 - ✅ **Random Number Generation**: Cryptographically secure random bytes, keys, and IVs
 - ✅ **Hashing**: SHA-1, SHA-256, SHA-512, BLAKE2b, BLAKE2s, MD5 (One-shot wrappers)
 - ✅ **HMAC**: Message authentication codes with all hash algorithms
 - ✅ **Symmetric Encryption**: AES with CBC and CTR modes
 - ✅ **Utilities**: Padding, hex encoding, constant-time operations
+- ✅ **Encoding**: Base64, PEM, ASN.1 DER encoding/decoding
+- ✅ **X.509 Certificates**: Parsing, validation, CSR creation, PEM/DER utilities
 
 ### Planned (Future Phases)
 
 - 🔄 **Authenticated Encryption**: AES-GCM
 - 🔄 **Incremental Hashing**: Streaming API for hashes and MACs
 - 🔄 **Asymmetric Crypto**: RSA, ECDSA, ECDH, Ed25519
-- 🔄 **X.509 Certificates**: Parsing, validation, CSR creation
 - 🔄 **TLS/SSL**: TLS 1.2 and 1.3 client/server
 - 🔄 **Key Derivation**: PBKDF2, HKDF, Scrypt, Argon2
-- 🔄 **Encoding**: PEM, DER, ASN.1
 
 ## Installation
 
@@ -135,6 +135,32 @@ iv := rand.generate_iv(16)! // 16-byte IV for AES
 random_num := rand.int_in_range(1, 100)!
 ```
 
+### X.509 Certificates
+
+```v
+import vopenssl.x509
+
+// Load a certificate from file
+cert := x509.load_certificate('cert.pem')!
+
+// Check certificate validity
+is_valid := cert.is_valid_now()
+is_expired := cert.is_expired()
+
+// Get certificate information
+subject := cert.get_subject()
+println('Subject: ${subject.common_name}')
+println('Issuer: ${cert.get_issuer().common_name}')
+
+// Validate certificate
+opts := x509.ValidationOptions{
+    current_time: time.now()
+    dns_name: 'example.com'
+    allow_expired: false
+}
+result := x509.validate_certificate(cert, [], opts)!
+```
+
 ## Module Structure
 
 ```
@@ -144,7 +170,8 @@ vopenssl/
 ├── mac/           # HMAC and message authentication
 ├── cipher/        # Symmetric encryption (AES, modes)
 ├── encoding/      # Encoding (Base64, PEM, ASN.1)
-└── utils/         # Utilities (padding, hex, etc.)
+├── x509/          # X.509 certificates, CSRs, validation
+├── utils/         # Utilities (padding, hex, etc.)
 ```
 
 ## Documentation
@@ -158,21 +185,24 @@ See the `examples/` directory for complete working examples:
 - `hash_file.v` - File hashing with different algorithms
 - `encrypt_file.v` - AES-CBC file encryption/decryption
 - `hmac_example.v` - HMAC generation and verification
+- `x509_example.v` - X.509 certificate parsing and validation
+- `csr_example.v` - Certificate Signing Request creation and management
 
 ## Development Status
 
-**Current Version**: 0.1.0 (Phase 1)
+**Current Version**: 0.1.0 (Phase 5)
 
-This library is under active development. Phase 1 (wrapper layer) is complete. Future phases will add RSA, ECC, X.509, and TLS support.
+This library is under active development. Phases 1-5 are complete (core cryptography, encoding, and X.509 certificates). Future phases will add enhanced TLS support and key derivation functions.
 
 ## Roadmap
 
 - [x] Phase 1: Project setup and wrapper layer
-- [ ] Phase 2: Encoding (PEM, DER, ASN.1)
-- [ ] Phase 3: Asymmetric cryptography (RSA, ECC)
-- [ ] Phase 4: X.509 certificates
-- [ ] Phase 5: TLS/SSL
-- [ ] Phase 6: Key derivation functions
+- [x] Phase 2: Encoding (PEM, DER, ASN.1)
+- [x] Phase 3: Asymmetric cryptography (RSA, ECC)
+- [x] Phase 4: X.509 certificates
+- [x] Phase 5: Certificate parsing, validation, CSR creation
+- [ ] Phase 6: TLS/SSL client/server
+- [ ] Phase 7: Key derivation functions (PBKDF2, HKDF, Argon2)
 
 ## Security
 

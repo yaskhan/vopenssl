@@ -40,7 +40,7 @@ fn main() {
 	// Если работает (с C bindings):
 	println('Keys generated!')
 	data := 'Hello RSA!'.bytes()
-	
+
 	// Шифрование
 	ciphertext := rsa.encrypt(key_pair.public, data, .oaep) or {
 		eprintln('Encryption error: ${err}')
