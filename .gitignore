@@ -1,0 +1,26 @@
+# Test files
+test_*.v
+tests/
+
+# Build output
+*.o
+*.so
+*.a
+*.dylib
+*.dll
+*.exe
+
+# V temporary files
+/tmp/
+v.mod.sum
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

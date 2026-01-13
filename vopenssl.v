@@ -56,9 +56,9 @@ pub type ECKeyPair = ecc.ECKeyPair
 pub type ECDSASignature = ecc.ECDSASignature
 pub type EllipticCurve = ecc.EllipticCurve
 
-// Ed25519 types
-pub type Ed25519PublicKey = ed25519.PublicKey
-pub type Ed25519PrivateKey = ed25519.PrivateKey
+// Ed25519 types (use []u8 directly since they are type aliases)
+pub type Ed25519PublicKey = []u8
+pub type Ed25519PrivateKey = []u8
 pub type Ed25519KeyPair = ed25519.KeyPair
 
 // Common enums
@@ -66,7 +66,8 @@ pub type HashAlgorithm = rsa.HashAlgorithm
 
 // Re-export RSA functions
 pub fn generate_rsa_key_pair(size RSAKeySize) !RSAKeyPair {
-	return rsa.generate_key_pair(size)
+	kp := rsa.generate_key_pair(size)!
+	return RSAKeyPair(kp)
 }
 
 pub fn rsa_encrypt(pub_key RSAPublicKey, data []u8, padding PaddingScheme) ![]u8 {
@@ -87,15 +88,37 @@ pub fn rsa_verify(pub_key RSAPublicKey, data []u8, signature []u8, hash_alg Hash
 
 // Re-export ECC functions
 pub fn generate_ecc_key_pair(curve EllipticCurve) !ECKeyPair {
-	return ecc.generate_key_pair(curve)
+	kp := ecc.generate_key_pair(curve)!
+	return ECKeyPair(kp)
 }
 
 pub fn ecdsa_sign(priv_key ECPrivateKey, data []u8, hash_alg HashAlgorithm) !ECDSASignature {
-	return ecc.ecdsa_sign(priv_key, data, hash_alg)
+	// Convert HashAlgorithm to ecc.HashAlgorithm
+	ecc_hash_alg := match hash_alg {
+		.sha1 { ecc.HashAlgorithm.sha1 }
+		.sha224 { ecc.HashAlgorithm.sha224 }
+		.sha256 { ecc.HashAlgorithm.sha256 }
+		.sha384 { ecc.HashAlgorithm.sha384 }
+		.sha512 { ecc.HashAlgorithm.sha512 }
+		.md5 { ecc.HashAlgorithm.md5 }
+		else { ecc.HashAlgorithm.sha256 } // default
+	}
+	sig := ecc.ecdsa_sign(priv_key, data, ecc_hash_alg)!
+	return ECDSASignature(sig)
 }
 
 pub fn ecdsa_verify(pub_key ECPublicKey, data []u8, signature ECDSASignature, hash_alg HashAlgorithm) !bool {
-	return ecc.ecdsa_verify(pub_key, data, signature, hash_alg)
+	// Convert HashAlgorithm to ecc.HashAlgorithm
+	ecc_hash_alg := match hash_alg {
+		.sha1 { ecc.HashAlgorithm.sha1 }
+		.sha224 { ecc.HashAlgorithm.sha224 }
+		.sha256 { ecc.HashAlgorithm.sha256 }
+		.sha384 { ecc.HashAlgorithm.sha384 }
+		.sha512 { ecc.HashAlgorithm.sha512 }
+		.md5 { ecc.HashAlgorithm.md5 }
+		else { ecc.HashAlgorithm.sha256 } // default
+	}
+	return ecc.ecdsa_verify(pub_key, data, signature, ecc_hash_alg)
 }
 
 pub fn ecdh(priv_key ECPrivateKey, other_pub_key ECPublicKey) ![]u8 {
@@ -104,7 +127,8 @@ pub fn ecdh(priv_key ECPrivateKey, other_pub_key ECPublicKey) ![]u8 {
 
 // Re-export Ed25519 functions
 pub fn generate_ed25519_key_pair() !Ed25519KeyPair {
-	return ed25519.generate_key_pair()
+	kp := ed25519.generate_key_pair()!
+	return Ed25519KeyPair(kp)
 }
 
 pub fn ed25519_sign(private_key Ed25519PrivateKey, message []u8) ![]u8 {
