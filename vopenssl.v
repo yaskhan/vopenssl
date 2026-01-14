@@ -4,6 +4,7 @@ module vopenssl
 import rsa
 import ecc
 import ed25519
+import x509
 
 // VOpenSSL - High-level cryptographic library for V
 //
@@ -38,6 +39,7 @@ import ed25519
 // - vopenssl.rsa: RSA asymmetric cryptography
 // - vopenssl.ecc: Elliptic Curve cryptography (ECDSA, ECDH)
 // - vopenssl.ed25519: Ed25519 signatures (wrapper over crypto.ed25519)
+// - vopenssl.x509: X.509 certificates, CSRs, and validation
 // - vopenssl.utils: Utilities (padding, hex encoding, etc.)
 
 // Re-export common types and functions for convenience
@@ -63,6 +65,19 @@ pub type Ed25519KeyPair = ed25519.KeyPair
 
 // Common enums
 pub type HashAlgorithm = rsa.HashAlgorithm
+
+// X.509 types
+pub type X509Certificate = x509.X509Certificate
+pub type X509Name = x509.X509Name
+pub type X509Validity = x509.X509Validity
+pub type X509Extension = x509.X509Extension
+pub type CSR = x509.CSR
+pub type ValidationOptions = x509.ValidationOptions
+pub type ValidationResult = x509.ValidationResult
+pub type KeyUsage = x509.KeyUsage
+pub type CertificateType = x509.CertificateType
+pub type CertificateFormat = x509.CertificateFormat
+pub type BasicConstraints = x509.BasicConstraints
 
 // Re-export RSA functions
 pub fn generate_rsa_key_pair(size RSAKeySize) !RSAKeyPair {
@@ -137,4 +152,49 @@ pub fn ed25519_sign(private_key Ed25519PrivateKey, message []u8) ![]u8 {
 
 pub fn ed25519_verify(public_key Ed25519PublicKey, message []u8, signature []u8) !bool {
 	return ed25519.verify(public_key, message, signature)
+}
+
+// Re-export X.509 functions
+pub fn parse_x509_certificate(der_data []u8) !X509Certificate {
+	return x509.parse_certificate(der_data)
+}
+
+pub fn parse_pem_x509_certificate(pem_str string) !X509Certificate {
+	return x509.parse_pem_certificate(pem_str)
+}
+
+pub fn load_x509_certificate(path string) !X509Certificate {
+	return x509.load_certificate(path)
+}
+
+pub fn create_csr(subject X509Name, public_key []u8, private_key []u8, signature_alg []int) !CSR {
+	return x509.create_csr(subject, public_key, private_key, signature_alg)
+}
+
+pub fn parse_csr(der_data []u8) !CSR {
+	return x509.parse_csr(der_data)
+}
+
+pub fn parse_pem_csr(pem_str string) !CSR {
+	return x509.parse_pem_csr(pem_str)
+}
+
+pub fn load_csr(path string) !CSR {
+	return x509.load_csr(path)
+}
+
+pub fn validate_x509_certificate(cert X509Certificate, intermediates []X509Certificate, opts ValidationOptions) !ValidationResult {
+	return x509.validate_certificate(cert, intermediates, opts)
+}
+
+pub fn verify_x509_signature(cert X509Certificate, issuer_cert X509Certificate) bool {
+	return x509.verify_signature(cert, issuer_cert)
+}
+
+pub fn validate_x509_host(cert X509Certificate, host string) !bool {
+	return x509.validate_host(cert, host)
+}
+
+pub fn sign_x509_csr(csr CSR, issuer_cert X509Certificate, issuer_priv_key []u8, validity X509Validity) !X509Certificate {
+	return x509.sign_csr(csr, issuer_cert, issuer_priv_key, validity)
 }
