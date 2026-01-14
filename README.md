@@ -24,12 +24,12 @@ VOpenSSL provides a comprehensive, easy-to-use cryptographic library for V that 
 - ✅ **Encoding**: Base64, PEM, ASN.1 DER encoding/decoding
 - ✅ **X.509 Certificates**: Parsing, validation, CSR creation, PEM/DER utilities
 - ✅ **TLS/SSL**: TLS 1.2 and 1.3 client/server implementation
+- ✅ **Key Derivation**: PBKDF2, HKDF, Scrypt, Argon2
 
 ### Planned (Future Phases)
 
 - 🔄 **Authenticated Encryption**: AES-GCM
 - 🔄 **Incremental Hashing**: Streaming API for hashes and MACs
-- 🔄 **Key Derivation**: PBKDF2, HKDF, Scrypt, Argon2
 
 ## Installation
 
@@ -239,7 +239,7 @@ This library is under active development. Phases 1-6 are complete (core cryptogr
 - [x] Phase 4: X.509 certificates
 - [x] Phase 5: Certificate parsing, validation, CSR creation
 - [x] Phase 6: TLS/SSL client/server (TLS 1.2 and 1.3)
-- [ ] Phase 7: Key derivation functions (PBKDF2, HKDF, Argon2)
+- [х] Phase 7: Key derivation functions (PBKDF2, HKDF, Argon2)
 
 ## Security
 
