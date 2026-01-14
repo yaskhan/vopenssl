@@ -14,7 +14,7 @@ VOpenSSL provides a comprehensive, easy-to-use cryptographic library for V that 
 
 ## Features
 
-### Current (Phase 1-5)
+### Current (Phase 1-6)
 
 - ✅ **Random Number Generation**: Cryptographically secure random bytes, keys, and IVs
 - ✅ **Hashing**: SHA-1, SHA-256, SHA-512, BLAKE2b, BLAKE2s, MD5 (One-shot wrappers)
@@ -23,13 +23,12 @@ VOpenSSL provides a comprehensive, easy-to-use cryptographic library for V that 
 - ✅ **Utilities**: Padding, hex encoding, constant-time operations
 - ✅ **Encoding**: Base64, PEM, ASN.1 DER encoding/decoding
 - ✅ **X.509 Certificates**: Parsing, validation, CSR creation, PEM/DER utilities
+- ✅ **TLS/SSL**: TLS 1.2 and 1.3 client/server implementation
 
 ### Planned (Future Phases)
 
 - 🔄 **Authenticated Encryption**: AES-GCM
 - 🔄 **Incremental Hashing**: Streaming API for hashes and MACs
-- 🔄 **Asymmetric Crypto**: RSA, ECDSA, ECDH, Ed25519
-- 🔄 **TLS/SSL**: TLS 1.2 and 1.3 client/server
 - 🔄 **Key Derivation**: PBKDF2, HKDF, Scrypt, Argon2
 
 ## Installation
@@ -161,6 +160,41 @@ opts := x509.ValidationOptions{
 result := x509.validate_certificate(cert, [], opts)!
 ```
 
+### TLS/SSL
+
+```v
+import vopenssl.tls
+
+// TLS Client
+config := tls.TLSConfig{
+    min_version: tls.version_tls_12
+    max_version: tls.version_tls_13
+    server_name: 'example.com'
+}
+
+mut conn := tls.dial('example.com:443', config)!
+println('Connected with ${tls.version_string(conn.get_version())}')
+
+conn.write('GET / HTTP/1.1\r\n\r\n'.bytes())!
+mut buffer := []u8{len: 4096}
+bytes_read := conn.read(mut buffer)!
+println(buffer[..bytes_read].bytestr())
+conn.close()!
+
+// TLS Server
+server_config := tls.TLSConfig{
+    certificates: [cert_der]
+    private_key: key_der
+}
+
+mut listener := tls.listen(':8443', server_config)!
+for {
+    mut conn := listener.accept()!
+    // Handle connection
+    conn.close()!
+}
+```
+
 ## Module Structure
 
 ```
@@ -171,6 +205,7 @@ vopenssl/
 ├── cipher/        # Symmetric encryption (AES, modes)
 ├── encoding/      # Encoding (Base64, PEM, ASN.1)
 ├── x509/          # X.509 certificates, CSRs, validation
+├── tls/           # TLS 1.2 and 1.3 client/server
 ├── utils/         # Utilities (padding, hex, etc.)
 ```
 
@@ -187,12 +222,14 @@ See the `examples/` directory for complete working examples:
 - `hmac_example.v` - HMAC generation and verification
 - `x509_example.v` - X.509 certificate parsing and validation
 - `csr_example.v` - Certificate Signing Request creation and management
+- `tls_client_example.v` - TLS client connection example
+- `tls_server_example.v` - TLS server implementation example
 
 ## Development Status
 
-**Current Version**: 0.1.0 (Phase 5)
+**Current Version**: 0.2.0 (Phase 6)
 
-This library is under active development. Phases 1-5 are complete (core cryptography, encoding, and X.509 certificates). Future phases will add enhanced TLS support and key derivation functions.
+This library is under active development. Phases 1-6 are complete (core cryptography, encoding, X.509 certificates, and TLS/SSL). Future phases will add key derivation functions and additional features.
 
 ## Roadmap
 
@@ -201,7 +238,7 @@ This library is under active development. Phases 1-5 are complete (core cryptogr
 - [x] Phase 3: Asymmetric cryptography (RSA, ECC)
 - [x] Phase 4: X.509 certificates
 - [x] Phase 5: Certificate parsing, validation, CSR creation
-- [ ] Phase 6: TLS/SSL client/server
+- [x] Phase 6: TLS/SSL client/server (TLS 1.2 and 1.3)
 - [ ] Phase 7: Key derivation functions (PBKDF2, HKDF, Argon2)
 
 ## Security

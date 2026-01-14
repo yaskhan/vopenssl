@@ -5,6 +5,7 @@ import rsa
 import ecc
 import ed25519
 import x509
+import tls
 
 // VOpenSSL - High-level cryptographic library for V
 //
@@ -40,6 +41,7 @@ import x509
 // - vopenssl.ecc: Elliptic Curve cryptography (ECDSA, ECDH)
 // - vopenssl.ed25519: Ed25519 signatures (wrapper over crypto.ed25519)
 // - vopenssl.x509: X.509 certificates, CSRs, and validation
+// - vopenssl.tls: TLS 1.2 and 1.3 client/server implementation
 // - vopenssl.utils: Utilities (padding, hex encoding, etc.)
 
 // Re-export common types and functions for convenience
@@ -197,4 +199,24 @@ pub fn validate_x509_host(cert X509Certificate, host string) !bool {
 
 pub fn sign_x509_csr(csr CSR, issuer_cert X509Certificate, issuer_priv_key []u8, validity X509Validity) !X509Certificate {
 	return x509.sign_csr(csr, issuer_cert, issuer_priv_key, validity)
+}
+
+// TLS types
+pub type TLSConfig = tls.TLSConfig
+pub type TLSConnection = tls.TLSConnection
+pub type TLSListener = tls.TLSListener
+pub type CipherSuite = tls.CipherSuite
+pub type ConnectionState = tls.ConnectionState
+
+// Re-export TLS functions
+pub fn tls_dial(address string, config TLSConfig) !TLSConnection {
+	return tls.dial(address, config)
+}
+
+pub fn tls_listen(address string, config TLSConfig) !TLSListener {
+	return tls.listen(address, config)
+}
+
+pub fn tls_version_string(version u16) string {
+	return tls.version_string(version)
 }
