@@ -14,12 +14,12 @@ VOpenSSL provides a comprehensive, easy-to-use cryptographic library for V that 
 
 ## Features
 
-### Current (Phase 1-6)
+### Current (Phase 1-8)
 
 - ✅ **Random Number Generation**: Cryptographically secure random bytes, keys, and IVs
 - ✅ **Hashing**: SHA-1, SHA-256, SHA-512, BLAKE2b, BLAKE2s, MD5 (One-shot wrappers)
 - ✅ **HMAC**: Message authentication codes with all hash algorithms
-- ✅ **Symmetric Encryption**: AES with CBC and CTR modes
+- ✅ **Symmetric Encryption**: AES (CBC, CTR, GCM) and ChaCha20-Poly1305
 - ✅ **Utilities**: Padding, hex encoding, constant-time operations
 - ✅ **Encoding**: Base64, PEM, ASN.1 DER encoding/decoding
 - ✅ **X.509 Certificates**: Parsing, validation, CSR creation, PEM/DER utilities
@@ -28,7 +28,6 @@ VOpenSSL provides a comprehensive, easy-to-use cryptographic library for V that 
 
 ### Planned (Future Phases)
 
-- 🔄 **Authenticated Encryption**: AES-GCM
 - 🔄 **Incremental Hashing**: Streaming API for hashes and MACs
 
 ## Installation
