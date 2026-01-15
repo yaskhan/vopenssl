@@ -191,7 +191,10 @@ pub fn validate_chain(cert X509Certificate, intermediates []X509Certificate, opt
 	return result
 }
 
-// verify_signature verifies the signature of a certificate
+// verify_signature verifies the cryptographic signature of a certificate using the issuer's public key.
+// It parses the SubjectPublicKeyInfo from the issuer certificate to determine the algorithm (RSA, ECDSA, Ed25519)
+// and validates that the signature matches the tbs_certificate blob.
+// Returns true if the signature is valid, false otherwise.
 pub fn verify_signature(cert X509Certificate, issuer_cert X509Certificate) bool {
 	// We need the issuer's public key to verify the signature on cert.tbs_certificate
 	if issuer_cert.public_key.len == 0 {

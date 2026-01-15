@@ -3,12 +3,15 @@ module cipher
 import encoding.binary
 
 // ChaCha20 state
+// ChaCha20 state represents the internal state of the ChaCha20 cipher.
+// It consists of 16 32-bit words.
 struct ChaCha20 {
 mut:
 	state [16]u32
 }
 
-// new_chacha20 creates a new ChaCha20 instance
+// new_chacha20 creates a new ChaCha20 instance with the given key and nonce.
+// Key must be 32 bytes (256 bits). Nonce must be 12 bytes (96 bits).
 pub fn new_chacha20(key []u8, nonce []u8) !ChaCha20 {
 	if key.len != 32 {
 		return error('invalid ChaCha20 key length: ${key.len}, expected 32')
@@ -42,12 +45,15 @@ pub fn new_chacha20(key []u8, nonce []u8) !ChaCha20 {
 	return c
 }
 
-// set_counter sets the block counter
+// set_counter sets the initial block counter.
+// The default is usually 0, but can be set to start at a different offset.
 pub fn (mut c ChaCha20) set_counter(counter u32) {
 	c.state[12] = counter
 }
 
-// encrypt_decrypt XORs the input with the keystream
+// encrypt_decrypt encrypts or decrypts the input byte slice.
+// Since ChaCha20 is a stream cipher, encryption and decryption are identical operations (XOR).
+// The internal state is updated as data is processed.
 pub fn (mut c ChaCha20) encrypt_decrypt(input []u8) []u8 {
 	mut output := []u8{len: input.len}
 	mut block := [64]u8{}
@@ -65,7 +71,8 @@ pub fn (mut c ChaCha20) encrypt_decrypt(input []u8) []u8 {
 	return output
 }
 
-// xor_key_stream is alias for encrypt_decrypt
+// xor_key_stream acts as an alias for encrypt_decrypt but writes the output to dst.
+// src and dst must have the same length and can overlap.
 pub fn (mut c ChaCha20) xor_key_stream(mut dst []u8, src []u8) {
 	encrypted := c.encrypt_decrypt(src)
 	for i in 0 .. src.len {

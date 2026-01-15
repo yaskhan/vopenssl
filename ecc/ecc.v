@@ -6,37 +6,37 @@ import math.big
 import ecc.vecdsa
 import hash
 
-// ECPublicKey представляет открытый ключ ECC
+// ECPublicKey represents an Elliptic Curve public key.
 pub struct ECPublicKey {
 pub:
 	curve EllipticCurve
-	x     []u8 // координата X
-	y     []u8 // координата Y
+	x     []u8 // X coordinate
+	y     []u8 // Y coordinate
 }
 
-// ECPrivateKey представляет приватный ключ ECC
+// ECPrivateKey represents an Elliptic Curve private key.
 pub struct ECPrivateKey {
 pub:
 	curve   EllipticCurve
-	private []u8        // приватный ключ (скаляр)
-	public  ECPublicKey // соответствующий открытый ключ
+	private []u8        // Private key scalar
+	public  ECPublicKey // Corresponding public key
 }
 
-// ECKeyPair представляет пару ключей ECC
+// ECKeyPair represents an Elliptic Curve key pair.
 pub struct ECKeyPair {
 pub:
 	private ECPrivateKey
 	public  ECPublicKey
 }
 
-// ECDSASignature представляет подпись ECDSA
+// ECDSASignature represents an ECDSA signature.
 pub struct ECDSASignature {
 pub:
 	r []u8
 	s []u8
 }
 
-// generate_key_pair генерирует пару ключей ECC для указанной кривой
+// generate_key_pair generates an ECC key pair for the specified curve.
 //
 // Example:
 // ```v
@@ -73,7 +73,7 @@ pub fn generate_key_pair(curve EllipticCurve) !ECKeyPair {
 	}
 }
 
-// ecdsa_sign создает ECDSA подпись данных
+// ecdsa_sign creates an ECDSA signature of data using the given private key and hash algorithm.
 //
 // Example:
 // ```v
@@ -111,7 +111,7 @@ pub fn ecdsa_sign(priv_key ECPrivateKey, data []u8, hash_alg HashAlgorithm) !ECD
 	return error('ECDSA signing for curve ${priv_key.curve} not yet implemented via vecdsa.')
 }
 
-// ecdsa_verify проверяет ECDSA подпись
+// ecdsa_verify verifies an ECDSA signature.
 //
 // Example:
 // ```v
@@ -139,7 +139,7 @@ pub fn ecdsa_verify(pub_key ECPublicKey, data []u8, signature ECDSASignature, ha
 	return error('ECDSA verification for curve ${pub_key.curve} not yet implemented via vecdsa.')
 }
 
-// ecdh выполняет ECDH (Elliptic Curve Diffie-Hellman) ключевой обмен
+// ecdh performs Elliptic Curve Diffie-Hellman key exchange.
 //
 // Example:
 // ```v
@@ -195,7 +195,7 @@ pub fn ecdh(priv_key ECPrivateKey, other_pub_key ECPublicKey) ![]u8 {
 	}
 }
 
-// ed25519_sign создает Ed25519 подпись
+// ed25519_sign creates an Ed25519 signature.
 pub fn ed25519_sign(priv_key ECPrivateKey, data []u8) ![]u8 {
 	if priv_key.curve != .ed25519 {
 		return error('Not an Ed25519 key')
@@ -205,7 +205,7 @@ pub fn ed25519_sign(priv_key ECPrivateKey, data []u8) ![]u8 {
 	return crypto_ed25519.sign(priv_key.private, data)
 }
 
-// ed25519_verify проверяет Ed25519 подпись
+// ed25519_verify verifies an Ed25519 signature.
 pub fn ed25519_verify(pub_key ECPublicKey, data []u8, signature []u8) !bool {
 	if pub_key.curve != .ed25519 {
 		return error('Not an Ed25519 key')
@@ -302,7 +302,7 @@ fn x25519_scalarmult(scalar []u8, point []u8) ![]u8 {
 	return x25519_scalarmult_impl(scalar, point)
 }
 
-// get_public_key_from_private восстанавливает открытый ключ из приватного
+// get_public_key_from_private recovers the public key from a private key.
 pub fn get_public_key_from_private(priv_key ECPrivateKey) !ECPublicKey {
 	match priv_key.curve {
 		.x25519 {

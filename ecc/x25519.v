@@ -221,6 +221,14 @@ fn fe_cswap(mut a Fe, mut b Fe, swap i64) {
 	}
 }
 
+// x25519 performs scalar multiplication for key agreement on Curve25519.
+// scalar: 32-byte private key (clamped).
+// point: 32-byte public key (u-coordinate).
+// Returns the resulting 32-byte shared secret (or public key if point is base point).
+pub fn x25519(scalar []u8, point []u8) []u8 {
+	return x25519_scalarmult_impl(scalar, point)
+}
+
 // Montgomery ladder for X25519
 fn x25519_scalarmult_impl(scalar []u8, point []u8) []u8 {
 	u := fe_from_bytes(point)

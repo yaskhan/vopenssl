@@ -197,17 +197,18 @@ for {
 
 ## Module Structure
 
-```
 vopenssl/
 ├── rand/          # Random number generation
 ├── hash/          # Hashing algorithms (SHA, BLAKE, MD5)
 ├── mac/           # HMAC and message authentication
-├── cipher/        # Symmetric encryption (AES, modes)
-├── encoding/      # Encoding (Base64, PEM, ASN.1)
+├── cipher/        # Symmetric encryption (AES, ChaCha20) and AEAD (GCM, Poly1305)
+├── formats/       # Encoding (Base64, PEM, ASN.1) - renamed from encoding
 ├── x509/          # X.509 certificates, CSRs, validation
 ├── tls/           # TLS 1.2 and 1.3 client/server
+├── kdf/           # Key Derivation (Argon2, Scrypt, HKDF, PBKDF2)
+├── ecc/           # Elliptic Curve Cryptography (NIST, Ed25519)
+├── rsa/           # RSA cryptography
 ├── utils/         # Utilities (padding, hex, etc.)
-```
 
 ## Documentation
 
@@ -227,9 +228,9 @@ See the `examples/` directory for complete working examples:
 
 ## Development Status
 
-**Current Version**: 0.2.0 (Phase 6)
+**Current Version**: 0.3.0 (Phase 8)
 
-This library is under active development. Phases 1-6 are complete (core cryptography, encoding, X.509 certificates, and TLS/SSL). Future phases will add key derivation functions and additional features.
+This library is under active development. Phases 1-8 are complete (core cryptography, encoding, X.509 certificates, TLS/SSL, KDFs, and AEAD).
 
 ## Roadmap
 
@@ -239,7 +240,8 @@ This library is under active development. Phases 1-6 are complete (core cryptogr
 - [x] Phase 4: X.509 certificates
 - [x] Phase 5: Certificate parsing, validation, CSR creation
 - [x] Phase 6: TLS/SSL client/server (TLS 1.2 and 1.3)
-- [х] Phase 7: Key derivation functions (PBKDF2, HKDF, Argon2)
+- [x] Phase 7: Key derivation functions (PBKDF2, HKDF, Argon2, Scrypt)
+- [x] Phase 8: Authenticated Encryption (ChaCha20-Poly1305, AES-GCM)
 
 ## Security
 

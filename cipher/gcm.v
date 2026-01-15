@@ -2,7 +2,14 @@ module cipher
 
 import crypto.aes as crypto_aes // still needed for types if shared, but we will use our AES
 
-// gcm_encrypt_decrypt performs GCM encryption/decryption
+// gcm_encrypt_decrypt performs AES-GCM encryption or decryption.
+// key: AES key (16, 24, or 32 bytes)
+// nonce: GCM nonce (recommended 12 bytes)
+// data: Plaintext (for encryption) or Ciphertext (for decryption)
+// aad: Additional Authenticated Data (optional, verified but not encrypted)
+// encrypt: true for encryption, false for decryption
+// Returns (ciphertext, tag) for encryption, or (plaintext, tag) for decryption.
+// Note: When decrypting, the caller must verify the returned tag against the expected tag.
 pub fn gcm_encrypt_decrypt(key []u8, nonce []u8, data []u8, aad []u8, encrypt bool) !([]u8, []u8) {
 	if nonce.len != 12 {
 		return error('GCM nonce must be 12 bytes')

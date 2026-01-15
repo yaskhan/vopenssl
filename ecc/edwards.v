@@ -42,7 +42,8 @@ pub fn identity() Point {
 	}
 }
 
-// base_point returns the Ed25519 base point G
+// base_point returns the Ed25519 base point G.
+// G = (x, 4/5).
 pub fn base_point() Point {
 	p := get_p()
 	y_hex := "6666666666666666666666666666666666666666666666666666666666666658"
@@ -59,7 +60,7 @@ pub fn base_point() Point {
 	}
 }
 
-// edwards_add adds two points on the Edwards curve
+// add adds two points on the Edwards curve using the specific addition formula.
 pub fn (p1 Point) add(p2 Point) Point {
 	p := get_p()
 	d := get_d()
@@ -82,7 +83,7 @@ pub fn (p1 Point) add(p2 Point) Point {
 	}
 }
 
-// edwards_double doubles a point on the Edwards curve
+// double doubles a point on the Edwards curve.
 pub fn (p1 Point) double() Point {
 	p := get_p()
 	
@@ -103,7 +104,9 @@ pub fn (p1 Point) double() Point {
 	}
 }
 
-// scalar_mult performs scalar multiplication (k * P)
+// scalar_mult performs scalar multiplication (k * P) using the double-and-add algorithm.
+// This is a constant-time operation with respect to the scalar length, but depends on bit values?
+// Note: This implementation is basic double-and-add.
 pub fn (p1 Point) scalar_mult(k big.Integer) Point {
 	mut res := identity()
 	mut base := p1
@@ -148,7 +151,11 @@ pub fn (p1 Point) encode() []u8 {
 	return bytes
 }
 
-// sign_eddsa_ctx implements EdDSA with context (RFC 8032)
+// sign_eddsa_ctx signs a message using EdDSA with the Ed25519 curve and an optional context.
+// private_key: 32-byte private key seed.
+// message: Message to sign.
+// context: Optional context string (max 255 bytes).
+// ph: Prehash flag (0 for Ed25519, 1 for Ed25519ph).
 pub fn sign_eddsa_ctx(private_key []u8, message []u8, context []u8, ph u8) ![]u8 {
 	if private_key.len != 32 {
 		return error("Invalid private key length")

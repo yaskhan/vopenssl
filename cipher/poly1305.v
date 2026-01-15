@@ -3,6 +3,10 @@ module cipher
 import encoding.binary
 
 // Poly1305 authenticator (RFC 8439)
+// Poly1305 authenticator (RFC 8439)
+// Provides a one-time authenticator for messages.
+// Note: This implementation currently uses a simplified 64-bit logic and may not be fully interoperable
+// with standard test vectors for large messages due to lack of u128/BigInt arithmetic in this module.
 pub struct Poly1305 {
 mut:
 	// Accumulator (h)
@@ -28,6 +32,7 @@ mut:
 	leftover int
 }
 
+// new_poly1305 creates a new Poly1305 instance with the given 32-byte one-time key.
 pub fn new_poly1305(key []u8) !Poly1305 {
 	if key.len != 32 {
 		return error('invalid Poly1305 key length')
@@ -57,6 +62,8 @@ pub fn new_poly1305(key []u8) !Poly1305 {
 	}
 }
 
+// update adds data to the authenticator.
+// Data can be added in chunks of any size.
 pub fn (mut p Poly1305) update(msg []u8) {
 	mut offset := 0
 	
@@ -101,6 +108,8 @@ pub fn (mut p Poly1305) update(msg []u8) {
 	}
 }
 
+// finish computes the final MAC tag.
+// It returns the 16-byte tag and resets the internal block buffer, but keeps the key.
 pub fn (mut p Poly1305) finish() []u8 {
 	if p.leftover > 0 {
 		p.buffer[p.leftover] = 1
@@ -117,6 +126,8 @@ pub fn (mut p Poly1305) finish() []u8 {
 	return p.finalize_val()
 }
 
+// poly1305_mac computes the MAC for a single message using the given key.
+// This is a convenience wrapper for new_poly1305 -> update -> finish.
 pub fn poly1305_mac(msg []u8, key []u8) ![]u8 {
 	mut p := new_poly1305(key)!
 	p.update(msg)
