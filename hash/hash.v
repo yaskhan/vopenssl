@@ -1,5 +1,11 @@
 module hash
 
+import crypto.sha256 as vsha256
+import crypto.sha512 as vsha512
+import crypto.sha1 as vsha1
+import crypto.md5 as vmd5
+import crypto.blake2b
+import crypto.blake2s
 import os
 
 // HashAlgorithm represents supported hash algorithms
@@ -18,15 +24,15 @@ pub enum HashAlgorithm {
 // hash_bytes computes the hash of data using the specified algorithm.
 pub fn hash_bytes(data []u8, algorithm HashAlgorithm) []u8 {
 	return match algorithm {
-		.sha1 { sha1(data) }
+		.sha1 { vsha1.sum(data) }
 		.sha224 { []u8{} /* TODO: sha224 not in vlib? */ }
-		.sha256 { sha256(data) }
-		.sha384 { sha512.sum384(data) }
-		.sha512 { sha512(data) }
-		.blake2b_256 { blake2b_256(data) or { panic(err) } }
-		.blake2b_512 { blake2b_512(data) or { panic(err) } }
-		.blake2s_256 { blake2s_256(data) or { panic(err) } }
-		.md5 { md5(data) }
+		.sha256 { vsha256.sum256(data) }
+		.sha384 { vsha512.sum384(data) }
+		.sha512 { vsha512.sum512(data) }
+		.blake2b_256 { blake2b.sum256(data) }
+		.blake2b_512 { blake2b.sum512(data) }
+		.blake2s_256 { blake2s.sum256(data) }
+		.md5 { vmd5.sum(data) }
 	}
 }
 
@@ -63,4 +69,31 @@ fn constant_time_compare(a []u8, b []u8) bool {
 		result |= a[i] ^ b[i]
 	}
 	return result == 0
+}
+
+// Hasher interface defines the methods for incremental hashing.
+pub interface Hasher {
+mut:
+	write(p []u8) !int
+	checksum() []u8
+	reset()
+	block_size() int
+	size() int
+	free()
+}
+
+// new_hasher creates a new streaming Hasher for the specified algorithm.
+pub fn new_hasher(algorithm HashAlgorithm) !Hasher {
+	return match algorithm {
+		.sha1 { new_sha1_hasher() }
+		.sha256 { new_sha256_hasher() }
+		.sha384 { new_sha384_hasher() }
+		.sha512 { new_sha512_hasher() }
+		.md5 { new_md5_hasher() }
+		// Blake2b/s generic streaming support might vary in vlib, 
+		// for now we only support the standard NIST + MD5 ones fully.
+		// If Blake2b implies .blake2b_256, we can try to wrap it.
+		// For now, return error for unsupported streaming algs if not ready.
+		else { error('streaming not yet implemented for ${algorithm}') }
+	}
 }
