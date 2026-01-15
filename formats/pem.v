@@ -1,4 +1,4 @@
-module encoding
+module formats
 
 import strings
 import encoding.base64

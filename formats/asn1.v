@@ -1,4 +1,4 @@
-module encoding
+module formats
 
 import strings
 
@@ -18,12 +18,12 @@ pub const (
 	tag_utc_time         = u8(0x17)
 )
 
-pub struct OID {
+pub struct ASN1OID {
 pub:
 	ids []int
 }
 
-pub fn (o OID) str() string {
+pub fn (o ASN1OID) str() string {
 	mut sb := strings.new_builder(20)
 	for i, id in o.ids {
 		if i > 0 { sb.write_string('.') }
@@ -34,7 +34,7 @@ pub fn (o OID) str() string {
 
 pub struct ASN1Null {}
 
-pub type ASN1Value = bool | i64 | []u8 | string | OID | ASN1Null | []ASN1Value
+pub type ASN1Value = bool | i64 | []u8 | string | ASN1OID | ASN1Null | []ASN1Value
 
 // asn1_unmarshal parses basic DER-encoded ASN.1 data.
 // It returns a generic ASN1Value structure.
@@ -151,7 +151,7 @@ fn parse_oid(data []u8) !ASN1Value {
 		}
 	}
 	
-	return ASN1Value(OID{ids: ids})
+	return ASN1Value(ASN1OID{ids: ids})
 }
 
 fn parse_sequence(data []u8) !ASN1Value {
@@ -163,4 +163,90 @@ fn parse_sequence(data []u8) !ASN1Value {
 		offset += consumed
 	}
 	return ASN1Value(list)
+}
+
+// -- Marshaling --
+
+pub fn encode_length(len int) []u8 {
+	if len <= 127 {
+		return [u8(len)]
+	}
+	mut bytes := []u8{}
+	mut l := len
+	for l > 0 {
+		bytes.insert(0, u8(l & 0xff))
+		l >>= 8
+	}
+	bytes.insert(0, u8(bytes.len | 0x80))
+	return bytes
+}
+
+pub fn encode_integer(data []u8) []u8 {
+	mut res := []u8{}
+	res << tag_integer
+	// DER integer must not have leading zero bytes unless the next byte has its MSB set
+	mut start := 0
+	for start < data.len - 1 && data[start] == 0 && data[start + 1] & 0x80 == 0 {
+		start++
+	}
+	mut content := data[start..].clone()
+	if content.len > 0 && content[0] & 0x80 != 0 {
+		content.insert(0, 0x00)
+	}
+
+	res << encode_length(content.len)
+	res << content
+	return res
+}
+
+pub fn encode_bit_string(data []u8) []u8 {
+	mut res := []u8{}
+	res << tag_bit_string
+	res << encode_length(data.len + 1)
+	res << 0x00 // Number of unused bits at the end of the last byte
+	res << data
+	return res
+}
+
+pub fn encode_sequence(items [][]u8) []u8 {
+	mut content := []u8{}
+	for item in items {
+		content << item
+	}
+	mut res := []u8{}
+	res << tag_sequence
+	res << encode_length(content.len)
+	res << content
+	return res
+}
+
+pub fn encode_oid(ids []int) []u8 {
+	mut content := []u8{}
+	if ids.len >= 2 {
+		content << u8(ids[0] * 40 + ids[1])
+		for i in 2 .. ids.len {
+			mut val := ids[i]
+			if val == 0 {
+				content << 0
+				continue
+			}
+			mut buf := []u8{}
+			buf.insert(0, u8(val & 0x7f))
+			val >>= 7
+			for val > 0 {
+				buf.insert(0, u8((val & 0x7f) | 0x80))
+				val >>= 7
+			}
+			content << buf
+		}
+	}
+	mut res := []u8{}
+	res << tag_object_identifier
+	res << encode_length(content.len)
+	res << content
+	return res
+}
+
+pub fn encode_null() []u8 {
+	return [tag_null, 0x00]
 }

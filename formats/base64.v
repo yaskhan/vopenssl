@@ -1,4 +1,4 @@
-module encoding
+module formats
 
 import encoding.base64 as std_base64
 
