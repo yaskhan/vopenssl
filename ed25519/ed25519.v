@@ -88,9 +88,34 @@ pub fn verify_strict(public_key PublicKey, message []u8, signature []u8) !bool {
 	return verify(public_key, message, signature)
 }
 
+// dom2 префикс для Ed25519ctx и Ed25519ph (RFC 8032)
+fn dom2(x u8, y []u8) []u8 {
+	mut res := 'SigEd25519 no Ed25519 collisions'.bytes()
+	res << x
+	res << u8(y.len)
+	res << y
+	return res
+}
+
 // sign_context создает подпись с контекстом (для предотвращения replay-атак)
 pub fn sign_context(private_key PrivateKey, message []u8, context []u8) ![]u8 {
-	// Ed25519ph или Ed25519ctx - требует специальной обработки
-	// Для простоты пока используем стандартную подпись
-	return sign(private_key, message)
+	if context.len > 255 {
+		return error('Context too long (max 255 bytes)')
+	}
+	// Ed25519ctx - требует специальной обработки
+	// Мы будем использовать нашу внутреннюю реализацию
+	return sign_internal(private_key, message, context, 0)
+}
+
+// sign_ph создает подпись для прехешированного сообщения с контекстом
+pub fn sign_ph(private_key PrivateKey, message []u8, context []u8) ![]u8 {
+	if context.len > 255 {
+		return error('Context too long (max 255 bytes)')
+	}
+	return sign_internal(private_key, message, context, 1)
+}
+
+fn sign_internal(private_key PrivateKey, message []u8, context []u8, ph u8) ![]u8 {
+	// Используем нашу новую реализацию из ecc/edwards.v
+	return ecc.sign_eddsa_ctx(private_key, message, context, ph)!
 }

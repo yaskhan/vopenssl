@@ -9,8 +9,8 @@ pub enum EllipticCurve {
 	ed25519   // Ed25519 для подписей (уже в vlib/crypto)
 }
 
-// CurveParams содержит параметры эллиптической кривой
-pub struct CurveParams {
+// ECCCurveParams содержит параметры эллиптической кривой
+pub struct ECCCurveParams {
 pub:
 	name     string
 	key_size int  // размер ключа в битах
@@ -24,10 +24,10 @@ pub:
 }
 
 // get_curve_params возвращает параметры для указанной кривой
-pub fn get_curve_params(curve EllipticCurve) !CurveParams {
+pub fn get_curve_params(curve EllipticCurve) !ECCCurveParams {
 	match curve {
 		.secp256r1 {
-			return CurveParams{
+			return ECCCurveParams{
 				name:     'secp256r1'
 				key_size: 256
 				// Параметры в big-endian формате
@@ -42,7 +42,7 @@ pub fn get_curve_params(curve EllipticCurve) !CurveParams {
 			}
 		}
 		.secp384r1 {
-			return CurveParams{
+			return ECCCurveParams{
 				name:     'secp384r1'
 				key_size: 384
 				field_p:  hex_to_bytes('FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFF00000000FFFFFFFFFFFFFFFF')
@@ -55,7 +55,7 @@ pub fn get_curve_params(curve EllipticCurve) !CurveParams {
 			}
 		}
 		.secp521r1 {
-			return CurveParams{
+			return ECCCurveParams{
 				name:     'secp521r1'
 				key_size: 521
 				field_p:  hex_to_bytes('01FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF')
@@ -68,7 +68,7 @@ pub fn get_curve_params(curve EllipticCurve) !CurveParams {
 			}
 		}
 		.x25519 {
-			return CurveParams{
+			return ECCCurveParams{
 				name:     'x25519'
 				key_size: 256
 				field_p:  hex_to_bytes('7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED')
@@ -81,7 +81,7 @@ pub fn get_curve_params(curve EllipticCurve) !CurveParams {
 			}
 		}
 		.ed25519 {
-			return CurveParams{
+			return ECCCurveParams{
 				name:     'ed25519'
 				key_size: 256
 				// Ed25519 uses a different curve: -x^2 + y^2 = 1 - (121665/121666)x^2y^2 mod p
