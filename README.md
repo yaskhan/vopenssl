@@ -25,10 +25,8 @@ VOpenSSL provides a comprehensive, easy-to-use cryptographic library for V that 
 - ✅ **X.509 Certificates**: Parsing, validation, CSR creation, PEM/DER utilities
 - ✅ **TLS/SSL**: TLS 1.2 and 1.3 client/server implementation
 - ✅ **Key Derivation**: PBKDF2, HKDF, Scrypt, Argon2
+- ✅ **Incremental Hashing**: Streaming API for hashes and MACs
 
-### Planned (Future Phases)
-
-- 🔄 **Incremental Hashing**: Streaming API for hashes and MACs
 
 ## Installation
 
