@@ -38,7 +38,7 @@ fn test_x509_extension() {
 	ext := X509Extension{
 		oid:      [0x55, 0x1d, 0x13] // Basic constraints
 		critical: true
-		value:    [0x30, 0x03, 0x01, 0x01, 0xff]
+		value:    [u8(0x30), 0x03, 0x01, 0x01, 0xff]
 	}
 
 	assert ext.oid.len == 3

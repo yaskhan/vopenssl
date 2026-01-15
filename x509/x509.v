@@ -1,13 +1,11 @@
 module x509
 
 import time
-import encoding
-import vopenssl.rsa
-import vopenssl.ecc
+import formats
 
 // X509Name represents a Distinguished Name (DN)
 pub struct X509Name {
-pub:
+pub mut:
 	country             string // C
 	organization        string // O
 	organizational_unit string // OU
@@ -58,6 +56,8 @@ pub:
 	public_key_algorithm []int // OID of public key algorithm
 	signature_algorithm  []int // OID of signature algorithm
 	signature            []u8
+	tbs_certificate      []u8  // Raw bytes of tbsCertificate for signature verification
+pub mut:
 	extensions           []X509Extension
 }
 
@@ -88,7 +88,7 @@ pub fn parse_certificate(der_data []u8) !X509Certificate {
 	}
 
 	offset += 1
-	length, len_bytes := encoding.parse_asn1_length(der_data[offset..])!
+	length, len_bytes := parse_asn1_length(der_data[offset..])!
 	offset += len_bytes
 
 	// Parse tbsCertificate
@@ -99,8 +99,13 @@ pub fn parse_certificate(der_data []u8) !X509Certificate {
 
 	// Skip tbsCertificate SEQUENCE
 	offset += 1
-	tbs_len, tbs_len_bytes := encoding.parse_asn1_length(der_data[offset..])!
+	tbs_len, tbs_len_bytes := parse_asn1_length(der_data[offset..])!
 	offset += tbs_len_bytes
+	
+	// Store pure TBS bytes
+	// The TBS certificate starts at tbs_offset and has length: 1 (tag) + tbs_len_bytes (length) + tbs_len (content)
+	tbs_total_len := 1 + tbs_len_bytes + tbs_len
+	tbs_certificate := der_data[tbs_offset..tbs_offset + tbs_total_len]
 
 	// Parse version (optional)
 	mut version := 2 // Default to v3 (0-indexed as 2)
@@ -135,7 +140,7 @@ pub fn parse_certificate(der_data []u8) !X509Certificate {
 	// Skip signature algorithm OID
 	if der_data[offset] == 0x06 {
 		offset += 1
-		oid_len, oid_len_bytes := encoding.parse_asn1_length(der_data[offset..])!
+		oid_len, oid_len_bytes := parse_asn1_length(der_data[offset..])!
 		offset += oid_len_bytes + oid_len
 	}
 
@@ -157,7 +162,7 @@ pub fn parse_certificate(der_data []u8) !X509Certificate {
 		return error('invalid certificate: subjectPublicKeyInfo not a SEQUENCE')
 	}
 	offset += 1
-	pub_key_info_len, pub_key_info_len_bytes := encoding.parse_asn1_length(der_data[offset..])!
+	pub_key_info_len, pub_key_info_len_bytes := parse_asn1_length(der_data[offset..])!
 	pub_key_info_total := 1 + pub_key_info_len_bytes + pub_key_info_len
 	public_key := der_data[offset..offset + pub_key_info_total]
 	offset += pub_key_info_total
@@ -166,7 +171,7 @@ pub fn parse_certificate(der_data []u8) !X509Certificate {
 	mut extensions := []X509Extension{}
 	if offset < tbs_offset + tbs_len && der_data[offset] == 0xa3 { // [3] IMPLICIT
 		offset += 1
-		ext_seq_len, ext_seq_len_bytes := encoding.parse_asn1_length(der_data[offset..])!
+		ext_seq_len, ext_seq_len_bytes := parse_asn1_length(der_data[offset..])!
 		offset += ext_seq_len_bytes
 		ext_end := offset + ext_seq_len
 
@@ -175,7 +180,7 @@ pub fn parse_certificate(der_data []u8) !X509Certificate {
 				break
 			}
 			offset += 1
-			ext_len, ext_len_bytes := encoding.parse_asn1_length(der_data[offset..])!
+			ext_len, ext_len_bytes := parse_asn1_length(der_data[offset..])!
 			offset += ext_len_bytes
 
 			// Parse extension OID
@@ -183,7 +188,7 @@ pub fn parse_certificate(der_data []u8) !X509Certificate {
 				break
 			}
 			offset += 1
-			oid_len, oid_len_bytes := encoding.parse_asn1_length(der_data[offset..])!
+			oid_len, oid_len_bytes := parse_asn1_length(der_data[offset..])!
 			offset += oid_len_bytes
 
 			mut oid := []int{}
@@ -196,7 +201,7 @@ pub fn parse_certificate(der_data []u8) !X509Certificate {
 			mut critical := false
 			if der_data[offset] == 0x01 {
 				offset += 1
-				crit_len, crit_len_bytes := encoding.parse_asn1_length(der_data[offset..])!
+				crit_len, crit_len_bytes := parse_asn1_length(der_data[offset..])!
 				offset += crit_len_bytes
 				if crit_len == 1 {
 					critical = der_data[offset] != 0x00
@@ -209,7 +214,7 @@ pub fn parse_certificate(der_data []u8) !X509Certificate {
 				break
 			}
 			offset += 1
-			value_len, value_len_bytes := encoding.parse_asn1_length(der_data[offset..])!
+			value_len, value_len_bytes := parse_asn1_length(der_data[offset..])!
 			offset += value_len_bytes
 
 			value := der_data[offset..offset + value_len]
@@ -231,7 +236,7 @@ pub fn parse_certificate(der_data []u8) !X509Certificate {
 		return error('invalid certificate: signatureAlgorithm not a SEQUENCE')
 	}
 	offset += 1
-	sig_alg_len2, sig_alg_len_bytes2 := encoding.parse_asn1_length(der_data[offset..])!
+	sig_alg_len2, sig_alg_len_bytes2 := parse_asn1_length(der_data[offset..])!
 	offset += sig_alg_len_bytes2 + sig_alg_len2
 
 	// Parse signature value
@@ -239,7 +244,7 @@ pub fn parse_certificate(der_data []u8) !X509Certificate {
 		return error('invalid certificate: signature not a BIT STRING')
 	}
 	offset += 1
-	sig_len, sig_len_bytes := encoding.parse_asn1_length(der_data[offset..])!
+	sig_len, sig_len_bytes := parse_asn1_length(der_data[offset..])!
 	offset += sig_len_bytes
 	// First byte is number of unused bits
 	sig_unused_bits := der_data[offset]
@@ -259,6 +264,7 @@ pub fn parse_certificate(der_data []u8) !X509Certificate {
 		public_key_algorithm: []int{}
 		signature_algorithm:  []int{}
 		signature:            signature
+		tbs_certificate:      tbs_certificate
 		extensions:           extensions
 	}
 }
@@ -270,7 +276,7 @@ pub fn parse_certificate(der_data []u8) !X509Certificate {
 // cert := x509.parse_pem_certificate(pem_str)!
 // ```
 pub fn parse_pem_certificate(pem_str string) !X509Certificate {
-	block := encoding.pem_decode(pem_str)!
+	block := formats.pem_decode(pem_str)!
 
 	if block.type_ != 'CERTIFICATE' {
 		return error('invalid PEM block type, expected CERTIFICATE, got ${block.type_}')
@@ -292,7 +298,7 @@ pub fn (cert X509Certificate) to_der() []u8 {
 // to_pem converts a certificate to PEM format
 pub fn (cert X509Certificate) to_pem() string {
 	der := cert.to_der()
-	return encoding.pem_encode('CERTIFICATE', {}, der)
+	return formats.pem_encode('CERTIFICATE', {}, der)
 }
 
 // is_expired checks if the certificate has expired
@@ -359,7 +365,7 @@ fn parse_name(data []u8) !(X509Name, int) {
 		return error('Name not a SEQUENCE')
 	}
 	offset += 1
-	length, len_bytes := encoding.parse_asn1_length(data[offset..])!
+	length, len_bytes := parse_asn1_length(data[offset..])!
 	offset += len_bytes
 	end := offset + length
 
@@ -369,7 +375,7 @@ fn parse_name(data []u8) !(X509Name, int) {
 			break
 		}
 		offset += 1
-		set_len, set_len_bytes := encoding.parse_asn1_length(data[offset..])!
+		set_len, set_len_bytes := parse_asn1_length(data[offset..])!
 		offset += set_len_bytes
 
 		// Parse RelativeDistinguishedName (SEQUENCE OF AttributeTypeAndValue)
@@ -377,7 +383,7 @@ fn parse_name(data []u8) !(X509Name, int) {
 			break
 		}
 		offset += 1
-		seq_len, seq_len_bytes := encoding.parse_asn1_length(data[offset..])!
+		seq_len, seq_len_bytes := parse_asn1_length(data[offset..])!
 		offset += seq_len_bytes
 		seq_end := offset + seq_len
 
@@ -387,7 +393,7 @@ fn parse_name(data []u8) !(X509Name, int) {
 				break
 			}
 			offset += 1
-			attr_len, attr_len_bytes := encoding.parse_asn1_length(data[offset..])!
+			attr_len, attr_len_bytes := parse_asn1_length(data[offset..])!
 			offset += attr_len_bytes
 
 			// Parse OID
@@ -395,7 +401,7 @@ fn parse_name(data []u8) !(X509Name, int) {
 				break
 			}
 			offset += 1
-			oid_len, oid_len_bytes := encoding.parse_asn1_length(data[offset..])!
+			oid_len, oid_len_bytes := parse_asn1_length(data[offset..])!
 			offset += oid_len_bytes
 
 			// Common name OID: 2.5.4.3
@@ -414,7 +420,7 @@ fn parse_name(data []u8) !(X509Name, int) {
 			// Parse value
 			if data[offset] == 0x13 || data[offset] == 0x0c { // PrintableString or UTF8String
 				offset += 1
-				val_len, val_len_bytes := encoding.parse_asn1_length(data[offset..])!
+				val_len, val_len_bytes := parse_asn1_length(data[offset..])!
 				offset += val_len_bytes
 
 				value := data[offset..offset + val_len].bytestr()
@@ -437,7 +443,7 @@ fn parse_name(data []u8) !(X509Name, int) {
 					name.common_name = value
 				} else {
 					// Try to guess based on content
-					if value.len == 2 && value.is_all_capital() {
+					if value.len == 2 {
 						name.country = value
 					} else if value.contains('@') {
 						name.email_address = value
@@ -450,7 +456,7 @@ fn parse_name(data []u8) !(X509Name, int) {
 			} else {
 				// Skip unknown type
 				offset += 1
-				skip_len, skip_len_bytes := encoding.parse_asn1_length(data[offset..])!
+				skip_len, skip_len_bytes := parse_asn1_length(data[offset..])!
 				offset += skip_len_bytes + skip_len
 			}
 		}
@@ -468,7 +474,7 @@ fn parse_validity(data []u8) !(X509Validity, int) {
 		return error('Validity not a SEQUENCE')
 	}
 	offset += 1
-	length, len_bytes := encoding.parse_asn1_length(data[offset..])!
+	length, len_bytes := parse_asn1_length(data[offset..])!
 	offset += len_bytes
 	end := offset + length
 
@@ -496,7 +502,7 @@ fn parse_time(data []u8) !(time.Time, int) {
 	tag := data[offset]
 	offset += 1
 
-	length, len_bytes := encoding.parse_asn1_length(data[offset..])!
+	length, len_bytes := parse_asn1_length(data[offset..])!
 	offset += len_bytes
 
 	time_str := data[offset..offset + length].bytestr()
@@ -507,43 +513,48 @@ fn parse_time(data []u8) !(time.Time, int) {
 			yy_str := time_str[0..2]
 			mut yy := 70
 			if yy_str.len >= 2 {
-				yy = int(yy_str)
+				yy = yy_str.int()
 			}
 			year := if yy >= 50 { 1900 + yy } else { 2000 + yy }
 
 			month_str := time_str[2..4]
 			mut month := 1
 			if month_str.len >= 2 {
-				month = int(month_str)
+				month = month_str.int()
 			}
 
 			day_str := time_str[4..6]
 			mut day := 1
 			if day_str.len >= 2 {
-				day = int(day_str)
+				day = day_str.int()
 			}
 
 			hour_str := time_str[6..8]
 			mut hour := 0
 			if hour_str.len >= 2 {
-				hour = int(hour_str)
+				hour = hour_str.int()
 			}
 
 			minute_str := time_str[8..10]
 			mut minute := 0
 			if minute_str.len >= 2 {
-				minute = int(minute_str)
+				minute = minute_str.int()
 			}
 
 			second_str := time_str[10..12]
 			mut second := 0
 			if second_str.len >= 2 {
-				second = int(second_str)
+				second = second_str.int()
 			}
 
-			t := time.new_time(time.TimeUTC)
-			return t.add_months(u32(year - 1970)).add_days(u32((month - 1) * 30 + (day - 1))).add_hours(u32(hour)).add_minutes(u32(minute)).add_seconds(u32(second)),
-				offset + length
+			return time.new(time.Time{
+				year: year
+				month: month
+				day: day
+				hour: hour
+				minute: minute
+				second: second
+			}), offset + length
 		}
 	} else if tag == 0x18 {
 		// GeneralizedTime (YYYYMMDDHHMMSSZ)
@@ -551,42 +562,47 @@ fn parse_time(data []u8) !(time.Time, int) {
 			year_str := time_str[0..4]
 			mut year := 2024
 			if year_str.len >= 4 {
-				year = int(year_str)
+				year = year_str.int()
 			}
 
 			month_str := time_str[4..6]
 			mut month := 1
 			if month_str.len >= 2 {
-				month = int(month_str)
+				month = month_str.int()
 			}
 
 			day_str := time_str[6..8]
 			mut day := 1
 			if day_str.len >= 2 {
-				day = int(day_str)
+				day = day_str.int()
 			}
 
 			hour_str := time_str[8..10]
 			mut hour := 0
 			if hour_str.len >= 2 {
-				hour = int(hour_str)
+				hour = hour_str.int()
 			}
 
 			minute_str := time_str[10..12]
 			mut minute := 0
 			if minute_str.len >= 2 {
-				minute = int(minute_str)
+				minute = minute_str.int()
 			}
 
 			second_str := time_str[12..14]
 			mut second := 0
 			if second_str.len >= 2 {
-				second = int(second_str)
+				second = second_str.int()
 			}
 
-			t := time.new_time(time.TimeUTC)
-			return t.add_months(u32(year - 1970)).add_days(u32((month - 1) * 30 + (day - 1))).add_hours(u32(hour)).add_minutes(u32(minute)).add_seconds(u32(second)),
-				offset + length
+			return time.new(time.Time{
+				year: year
+				month: month
+				day: day
+				hour: hour
+				minute: minute
+				second: second
+			}), offset + length
 		}
 	}
 

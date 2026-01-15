@@ -1,6 +1,10 @@
 module x509
 
 import time
+import rsa
+import ecc
+import formats
+import hash
 
 // ValidationOptions defines options for certificate validation
 pub struct ValidationOptions {
@@ -18,7 +22,7 @@ pub:
 
 // ValidationResult represents the result of certificate validation
 pub struct ValidationResult {
-pub:
+pub mut:
 	is_valid   bool
 	is_trusted bool
 	chain      []X509Certificate
@@ -59,7 +63,7 @@ pub fn validate_certificate(cert X509Certificate, intermediates []X509Certificat
 	}
 
 	// Use current time if not specified
-	valid_time := if opts.current_time.unix == 0 { time.now() } else { opts.current_time }
+	valid_time := if opts.current_time.unix() == 0 { time.now() } else { opts.current_time }
 
 	// Check validity period
 	if !opts.allow_expired {
@@ -189,34 +193,217 @@ pub fn validate_chain(cert X509Certificate, intermediates []X509Certificate, opt
 
 // verify_signature verifies the signature of a certificate
 pub fn verify_signature(cert X509Certificate, issuer_cert X509Certificate) bool {
-	// This would verify the certificate signature using the issuer's public key
-	// Full implementation requires cryptographic signature verification
-	// For now, return true for demonstration
-
-	// Check that the issuer is not the subject (self-signed)
-	if cert.subject == cert.issuer {
-		// For self-signed certs, verify with own public key
-		return cert.public_key.len > 0
+	// We need the issuer's public key to verify the signature on cert.tbs_certificate
+	if issuer_cert.public_key.len == 0 {
+		return false
 	}
+	
+	// Parse issuer public key from SPKI
+	// SPKI = SEQUENCE { CA: AlgorithmIdentifier, PubKey: BIT STRING }
+	spki := issuer_cert.public_key
+	parsed_spki := formats.asn1_unmarshal(spki) or { return false }
+	
+	// Expecting a Sequence of 2 items
+	if parsed_spki !is []formats.ASN1Value { return false }
+	spki_seq := parsed_spki as []formats.ASN1Value
+	if spki_seq.len < 2 { return false }
+	
+	alg_id := spki_seq[0]
+	pub_key_bits := spki_seq[1]
+	
+	if alg_id !is []formats.ASN1Value { return false }
+	alg_seq := alg_id as []formats.ASN1Value
+	if alg_seq.len < 1 { return false }
+	
+	oid_val := alg_seq[0]
+	if oid_val !is formats.ASN1OID { return false }
+	oid := (oid_val as formats.ASN1OID).ids
+	
+	// Convert OID to string for comparison (simplified)
+	// RSA: 1.2.840.113549.1.1.1
+	// P-256: 1.2.840.10045.2.1
+	// Ed25519: 1.3.101.112
+	
+	// Helper to check OID
+	is_oid := fn(ids []int, expected []int) bool {
+		if ids.len != expected.len { return false }
+		for i in 0 .. ids.len { if ids[i] != expected[i] { return false } }
+		return true
+	}
+	
+	// Determine Hash Algorithm from cert.signature_algorithm
+	// This should be parsed from cert.signature_algorithm OID
+	// See RFC 3279, 5758.
+	// Common:
+	// sha256WithRSAEncryption: 1.2.840.113549.1.1.11
+	// ecdsa-with-SHA256: 1.2.840.10045.4.3.2
+	// Ed25519: 1.3.101.112 (Signature algorithm same as key OID)
+	
+	sig_alg_oid := oid_to_string(cert.signature_algorithm)
+	hash_alg := match sig_alg_oid {
+		'1.2.840.113549.1.1.11', '1.2.840.10045.4.3.2' { hash.HashAlgorithm.sha256 }
+		'1.2.840.113549.1.1.12', '1.2.840.10045.4.3.3' { hash.HashAlgorithm.sha384 }
+		'1.2.840.113549.1.1.13', '1.2.840.10045.4.3.4' { hash.HashAlgorithm.sha512 }
+		else { hash.HashAlgorithm.sha256 } // Default fallback or error
+	}
+	
+	rsa_hash_alg := match hash_alg {
+		.sha1 { rsa.HashAlgorithm.sha1 }
+		.sha224 { rsa.HashAlgorithm.sha224 }
+		.sha256 { rsa.HashAlgorithm.sha256 }
+		.sha384 { rsa.HashAlgorithm.sha384 }
+		.sha512 { rsa.HashAlgorithm.sha512 }
+		.md5 { rsa.HashAlgorithm.md5 }
+		else { rsa.HashAlgorithm.sha256 }
+	}
+	
+	if pub_key_bits !is []u8 { return false }
+	key_bytes := pub_key_bits as []u8
+	
+	if is_oid(oid, [1, 2, 840, 113549, 1, 1, 1]) {
+		// RSA Encryption
+		// Parse RSAPublicKey ::= SEQUENCE { modulus INTEGER, publicExponent INTEGER }
+		parsed_key := formats.asn1_unmarshal(key_bytes) or { return false }
+		if parsed_key !is []formats.ASN1Value { return false }
+		key_seq := parsed_key as []formats.ASN1Value
+		if key_seq.len < 2 { return false }
+		
+		n_val := key_seq[0]
+		e_val := key_seq[1]
+		
+		// Helper to extract bytes from Integer (i64 or []u8)
+		get_bytes := fn(val formats.ASN1Value) []u8 {
+			if val is []u8 { return val }
+			if val is i64 { 
+				// Convert i64 to bytes (big endian)
+				// Minimal implementation for small E
+				mut res := []u8{}
+				mut v := val
+				for v > 0 {
+					res.insert(0, u8(v & 0xFF))
+					v >>= 8
+				}
+				if res.len == 0 { return [u8(0)] }
+				return res
+			}
+			return []u8{}
+		}
 
-	// For CA-issued certs, verify with issuer's public key
-	return issuer_cert.public_key.len > 0 && cert.signature.len > 0
+		n := get_bytes(n_val)
+		e := get_bytes(e_val)
+		
+		pub_key := rsa.RSAPublicKey{ n: n, e: e }
+		
+		// For RSA verify, we typically verify the hash of the TBS certificate
+		// Compute hash of tbs_certificate
+		hashed := hash.hash_bytes(cert.tbs_certificate, hash_alg)
+		
+		// x509 signatures usually use PKCS#1 v1.5
+		// x509 signatures usually use PKCS#1 v1.5
+		return rsa.verify(pub_key, hashed, cert.signature, rsa_hash_alg, .pkcs1_v15) or { false }
+		
+	} else if is_oid(oid, [1, 2, 840, 10045, 2, 1]) {
+		// EC Public Key
+		// key_bytes is the SEC1 encoded point
+		// We need to parse ECDSASignature from DER signature (Sequence of R, S)
+		// cert.signature is usually DER encoded
+		
+		parsed_sig := formats.asn1_unmarshal(cert.signature) or { return false }
+		if parsed_sig !is []formats.ASN1Value { return false }
+		sig_seq := parsed_sig as []formats.ASN1Value
+		if sig_seq.len < 2 { return false }
+		
+		get_bytes := fn(val formats.ASN1Value) []u8 {
+			if val is []u8 { return val }
+			if val is i64 { 
+				mut res := []u8{}
+				mut v := val
+				for v > 0 {
+					res.insert(0, u8(v & 0xFF))
+					v >>= 8
+				}
+				if res.len == 0 { return [u8(0)] } // Should handle zero properly
+				return res
+			}
+			return []u8{}
+		}
+
+		r := get_bytes(sig_seq[0])
+		s := get_bytes(sig_seq[1])
+		
+		signature := ecc.ECDSASignature{ r: r, s: s }
+		
+		// Determine curve from Parameters? 
+		// AlgIdentifier params for EC is NamedCurve OID.
+		// For now we can infer from key length or try P-256 (most common) except if OID implies otherwise.
+		// But verify function needs curve. P-256 is .secp256r1.
+		
+		// Extract curve from SPKI parameters
+		// spki_seq[0] is AlgId -> [OID, Params]
+		// Params should be NamedCurve OID
+		// P-256 OID: 1.2.840.10045.3.1.7
+		curve := ecc.EllipticCurve.secp256r1 // Default/Assumption if parsing fails or matched
+		
+		if alg_seq.len > 1 {
+			param_val := alg_seq[1]
+			if param_val is formats.ASN1OID {
+				p_oid := (param_val as formats.ASN1OID).ids
+				if is_oid(p_oid, [1, 2, 840, 10045, 3, 1, 7]) {
+					// P-256
+				} else if is_oid(p_oid, [1, 3, 132, 0, 34]) {
+					// P-384
+					// curve = .secp384r1
+					return false // Not supporting P-384 verify yet or update code
+				}
+			}
+		}
+		
+		// Parse Public Key Point (04 || X || Y)
+		if key_bytes.len != 65 || key_bytes[0] != 0x04 {
+			return false // Only support uncompressed P-256 for now
+		}
+		x := key_bytes[1..33]
+		y := key_bytes[33..65]
+		
+		pub_key := ecc.ECPublicKey{
+			curve: curve
+			x: x
+			y: y
+		}
+		
+		return ecc.ecdsa_verify(pub_key, cert.tbs_certificate, signature, unsafe { ecc.HashAlgorithm(int(hash_alg)) }) or { false }
+		
+	} else if is_oid(oid, [1, 3, 101, 112]) {
+		// Ed25519
+		// key_bytes is raw 32 bytes
+		if key_bytes.len != 32 { return false }
+		
+		pub_key := ecc.ECPublicKey{
+			curve: .ed25519
+			x: key_bytes
+			y: []u8{}
+		}
+		
+		// Ed25519 signature is raw 64 bytes
+		if cert.signature.len != 64 { return false }
+		
+		return ecc.ed25519_verify(pub_key, cert.tbs_certificate, cert.signature) or { false }
+	}
+	
+	// Unsupported algorithm
+	return false
 }
 
 // check_revocation checks if a certificate has been revoked
 pub fn check_revocation(cert X509Certificate, crl_urls []string) bool {
-	// This would check Certificate Revocation Lists (CRLs) or OCSP
 	// Full implementation requires HTTP client and CRL parsing
-	// For now, return false (not revoked)
-
-	return false
+	// For strictly local validation, we return false (not revoked)
+	return false 
 }
 
 // check_online_revocation checks OCSP for certificate revocation
 pub fn check_online_revocation(cert X509Certificate, issuer_cert X509Certificate, ocsp_urls []string) !bool {
-	// This would check OCSP servers for certificate revocation
-	// Full implementation requires HTTP client and OCSP protocol
-	return error('OCSP checking not implemented')
+	return error('OCSP checking not implemented - requires network client')
 }
 
 // get_issuer_identifier returns a unique identifier for a certificate's issuer
@@ -332,3 +519,14 @@ pub:
 	is_ca               bool
 	path_len_constraint int
 }
+
+fn oid_to_string(oid []int) string {
+	mut s := ''
+	for i, v in oid {
+		if i > 0 { s += '.' }
+		s += v.str()
+	}
+	return s
+}
+
+

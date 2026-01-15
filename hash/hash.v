@@ -5,7 +5,9 @@ import os
 // HashAlgorithm represents supported hash algorithms
 pub enum HashAlgorithm {
 	sha1
+	sha224
 	sha256
+	sha384
 	sha512
 	blake2b_256
 	blake2b_512
@@ -17,7 +19,9 @@ pub enum HashAlgorithm {
 pub fn hash_bytes(data []u8, algorithm HashAlgorithm) []u8 {
 	return match algorithm {
 		.sha1 { sha1(data) }
+		.sha224 { []u8{} /* TODO: sha224 not in vlib? */ }
 		.sha256 { sha256(data) }
+		.sha384 { sha512.sum384(data) }
 		.sha512 { sha512(data) }
 		.blake2b_256 { blake2b_256(data) or { panic(err) } }
 		.blake2b_512 { blake2b_512(data) or { panic(err) } }

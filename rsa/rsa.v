@@ -1,7 +1,9 @@
 module rsa
 
-// RSA module - API structure for Phase 1
-// Full implementation requires big integer arithmetic (Phase 3)
+import math.big
+import crypto.rand
+
+// RSA module - Pure V implementation
 
 // RSAKeySize определяет размер ключа RSA в битах
 pub enum RSAKeySize {
@@ -62,12 +64,129 @@ pub enum PaddingScheme {
 // key_pair := rsa.generate_key_pair(.bits2048)!
 // ```
 pub fn generate_key_pair(size RSAKeySize) !RSAKeyPair {
-	// Для фазы 1 используем упрощенную реализацию
-	// В реальной реализации нужно использовать библиотеку big integers
-	// или C bindings к OpenSSL/libgcrypt
-	
-	// Это заглушка - полная реализация требует big integer арифметики
-	return error('RSA key generation requires big integer library. Use C bindings or implement big integer arithmetic.')
+	bit_len := int(size)
+	half_len := bit_len / 2
+
+	e := big.integer_from_int(65537)
+
+	for {
+		p := generate_prime(half_len)!
+		q := generate_prime(half_len)!
+
+		if p == q {
+			continue
+		}
+
+		n := p * q
+		
+		p_minus_1 := p - big.integer_from_int(1)
+		q_minus_1 := q - big.integer_from_int(1)
+		phi := p_minus_1 * q_minus_1
+
+		// gcd(e, phi) must be 1
+		g := e.gcd(phi)
+		if g != big.integer_from_int(1) {
+			continue
+		}
+
+		d := e.mod_inverse(phi)!
+
+		// CRT parameters
+		dp := d.mod_euclid(p_minus_1)
+		dq := d.mod_euclid(q_minus_1)
+		qi := q.mod_inverse(p)!
+
+		n_bytes, _ := n.bytes()
+		e_bytes, _ := e.bytes()
+		d_bytes, _ := d.bytes()
+		p_bytes, _ := p.bytes()
+		q_bytes, _ := q.bytes()
+		dp_bytes, _ := dp.bytes()
+		dq_bytes, _ := dq.bytes()
+		qi_bytes, _ := qi.bytes()
+
+		return RSAKeyPair{
+			private: RSAPrivateKey{
+				n: n_bytes
+				e: e_bytes
+				d: d_bytes
+				p: p_bytes
+				q: q_bytes
+				dp: dp_bytes
+				dq: dq_bytes
+				qi: qi_bytes
+			}
+			public: RSAPublicKey{
+				n: n_bytes
+				e: e_bytes
+			}
+		}
+	}
+	return error('failed to generate key pair')
+}
+
+// generate_prime генерирует случайное простое число заданного размера
+fn generate_prime(bits int) !big.Integer {
+	byte_len := (bits + 7) / 8
+	for {
+		mut bytes := rand.bytes(byte_len)!
+		// Устанавливаем старший бит, чтобы гарантировать длину, 
+		// и младший бит, чтобы число было нечетным
+		bytes[0] |= 0x80
+		bytes[byte_len - 1] |= 0x01
+		
+		p := big.integer_from_bytes(bytes)
+		if is_prime(p, 40)! {
+			return p
+		}
+	}
+	return error('failed to generate prime')
+}
+
+// is_prime проверяет число на простоту с помощью теста Миллера-Рабина
+fn is_prime(n big.Integer, k int) !bool {
+	one := big.integer_from_int(1)
+	two := big.integer_from_int(2)
+	zero := big.integer_from_int(0)
+
+	if n < two { return false }
+	if n == two || n == big.integer_from_int(3) { return true }
+	if n % two == zero { return false }
+
+	// n - 1 = 2^s * d
+	mut d := n - one
+	mut s := 0
+	for d % two == zero {
+		d /= two
+		s++
+	}
+
+	for _ in 0 .. k {
+		// Выбираем случайное a в диапазоне [2, n - 2]
+		// Для простоты используем маленькие простые числа или случайные байты
+		mut a_bytes := rand.bytes(n.bit_len() / 8)!
+		mut a := big.integer_from_bytes(a_bytes)
+		if a < two { a = two }
+		if a >= n - one { a = n - two }
+
+		mut x := a.big_mod_pow(d, n) or { return false }
+		if x == one || x == n - one {
+			continue
+		}
+
+		mut composite := true
+		for _ in 0 .. s - 1 {
+			x = x.big_mod_pow(two, n) or { return false }
+			if x == n - one {
+				composite = false
+				break
+			}
+		}
+		if composite {
+			return false
+		}
+	}
+	return true
 }
 
 // encrypt шифрует данные с использованием открытого ключа RSA

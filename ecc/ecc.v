@@ -2,6 +2,9 @@ module ecc
 
 import crypto.rand
 import crypto.ed25519 as crypto_ed25519
+import math.big
+import ecc.vecdsa
+import hash
 
 // ECPublicKey представляет открытый ключ ECC
 pub struct ECPublicKey {
@@ -83,11 +86,29 @@ pub fn ecdsa_sign(priv_key ECPrivateKey, data []u8, hash_alg HashAlgorithm) !ECD
 	}
 
 	// Вычисляем хеш от данных
-	hash := compute_hash(data, hash_alg)
+	digest := compute_hash(data, hash_alg)
 
-	// ECDSA подпись: r, s = k^-1 * (hash + r * private_key) mod n
-	// Требует big integer арифметики и операций на эллиптической кривой
-	return error('ECDSA signing requires elliptic curve arithmetic. Use C bindings or implement point multiplication.')
+	if priv_key.curve == .secp256r1 {
+		// Используем vecdsa для P-256
+		c := vecdsa.p256()
+		v_priv := vecdsa.PrivateKey{
+			d:          big.integer_from_bytes(priv_key.private)
+			public_key: vecdsa.PublicKey{
+				curve: c
+				x:     big.integer_from_bytes(priv_key.public.x)
+				y:     big.integer_from_bytes(priv_key.public.y)
+			}
+		}
+		r, s := vecdsa.sign(&v_priv, digest)!
+		r_bytes, _ := r.bytes()
+		s_bytes, _ := s.bytes()
+		return ECDSASignature{
+			r: r_bytes
+			s: s_bytes
+		}
+	}
+
+	return error('ECDSA signing for curve ${priv_key.curve} not yet implemented via vecdsa.')
 }
 
 // ecdsa_verify проверяет ECDSA подпись
@@ -101,11 +122,21 @@ pub fn ecdsa_verify(pub_key ECPublicKey, data []u8, signature ECDSASignature, ha
 		return error('Use ed25519_verify for Ed25519 curve')
 	}
 
-	hash := compute_hash(data, hash_alg)
+	digest := compute_hash(data, hash_alg)
 
-	// Проверка: compute Q = s^-1 * R + r * Q
-	// Сравнение с открытым ключом
-	return error('ECDSA verification requires elliptic curve arithmetic. Use C bindings.')
+	if pub_key.curve == .secp256r1 {
+		c := vecdsa.p256()
+		v_pub := vecdsa.PublicKey{
+			curve: c
+			x:     big.integer_from_bytes(pub_key.x)
+			y:     big.integer_from_bytes(pub_key.y)
+		}
+		r := big.integer_from_bytes(signature.r)
+		s := big.integer_from_bytes(signature.s)
+		return vecdsa.verify(&v_pub, digest, r, s)
+	}
+
+	return error('ECDSA verification for curve ${pub_key.curve} not yet implemented via vecdsa.')
 }
 
 // ecdh выполняет ECDH (Elliptic Curve Diffie-Hellman) ключевой обмен
@@ -126,7 +157,37 @@ pub fn ecdh(priv_key ECPrivateKey, other_pub_key ECPublicKey) ![]u8 {
 		}
 		.secp256r1, .secp384r1, .secp521r1 {
 			// ECDH: shared = private * public_point
-			return error('ECDH requires elliptic curve point multiplication. Use C bindings.')
+			// Используем vecdsa для NIST кривых
+			c := match priv_key.curve {
+				.secp256r1 { vecdsa.p256() }
+				.secp384r1 { vecdsa.p384() }
+				.secp521r1 { vecdsa.p521() }
+				else { return error('Unexpected curve') }
+			}
+
+			x_big := big.integer_from_bytes(other_pub_key.x)
+			y_big := big.integer_from_bytes(other_pub_key.y)
+
+			// Выполняем скалярное умножение: (shared_x, shared_y) = priv_key * other_pub_key
+			sx, sy := c.scalar_mult(x_big, y_big, priv_key.private)
+			zero := big.integer_from_int(0)
+			if sx == zero && sy == zero {
+				return error('ECDH result is point at infinity')
+			}
+
+			// Общий секрет в ECDH - это X-координата результирующей точки
+			mut shared_secret, _ := sx.bytes()
+			
+			// Дополняем нулями до нужной длины (key_size / 8)
+			expected_len := (c.params().bit_size + 7) / 8
+			if shared_secret.len < expected_len {
+				mut padded := []u8{len: expected_len, init: 0}
+				for i in 0 .. shared_secret.len {
+					padded[expected_len - shared_secret.len + i] = shared_secret[i]
+				}
+				return padded
+			}
+			return shared_secret
 		}
 		else {
 			return error('ECDH not supported for curve ${priv_key.curve}')
@@ -162,15 +223,38 @@ fn compute_hash(data []u8, alg HashAlgorithm) []u8 {
 	return hash_bytes(data, alg)
 }
 
-// generate_ecdsa_key_pair генерирует ключи для NIST кривых (заглушка)
+// generate_ecdsa_key_pair генерирует ключи для NIST кривых
 fn generate_ecdsa_key_pair(curve EllipticCurve) !ECKeyPair {
-	// Для фазы 1: заглушка
-	// Полная реализация требует:
-	// 1. Выбор случайного скаляра d в диапазоне [1, n-1]
-	// 2. Вычисление точки Q = d * G
-	// 3. Возврат ключей
+	c := match curve {
+		.secp256r1 { vecdsa.p256() }
+		.secp384r1 { vecdsa.p384() }
+		.secp521r1 { vecdsa.p521() }
+		else { return error('Unexpected curve for ECDSA key generation') }
+	}
+	
+	v_priv := vecdsa.generate_key(c)!
 
-	return error('ECDSA key generation requires elliptic curve arithmetic. Use C bindings or implement full EC arithmetic.')
+	d_bytes, _ := v_priv.d.bytes()
+	d_b := []u8(d_bytes)
+	x_bytes, _ := v_priv.public_key.x.bytes()
+	x_b := []u8(x_bytes)
+	y_bytes, _ := v_priv.public_key.y.bytes()
+	y_b := []u8(y_bytes)
+
+	pk := ECPublicKey{
+		curve: curve
+		x:     x_b
+		y:     y_b
+	}
+
+	return ECKeyPair{
+		private: ECPrivateKey{
+			curve:   curve
+			private: d_b
+			public:  pk
+		}
+		public: pk
+	}
 }
 
 // generate_x25519_key_pair генерирует ключи для X25519
@@ -215,12 +299,7 @@ fn x25519_scalarmult(scalar []u8, point []u8) ![]u8 {
 		return error('X25519 requires 32-byte inputs')
 	}
 
-	// Это заглушка - полная реализация X25519 требует:
-	// 1. Монгомери лестницу
-	// 2. Полевую арифметику mod 2^255-19
-
-	// Для совместимости можно использовать C биндинги к libsodium или tweetnacl
-	return error('X25519 scalar multiplication requires C bindings or implementation of Montgomery ladder.')
+	return x25519_scalarmult_impl(scalar, point)
 }
 
 // get_public_key_from_private восстанавливает открытый ключ из приватного

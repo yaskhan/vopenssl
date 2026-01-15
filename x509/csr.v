@@ -1,6 +1,6 @@
 module x509
 
-import encoding
+import formats
 import rand
 import hash
 
@@ -10,9 +10,10 @@ pub:
 	version             int
 	subject             X509Name
 	public_key          []u8 // DER-encoded SubjectPublicKeyInfo
-	attributes          map[string][]u8
 	signature           []u8
 	signature_algorithm []int // OID of signature algorithm
+pub mut:
+	attributes          map[string][]u8
 }
 
 // CSRAttribute represents an attribute in a CSR
@@ -35,7 +36,7 @@ pub:
 // ```
 pub fn create_csr(subject X509Name, public_key []u8, private_key []u8, signature_alg []int) !CSR {
 	// Generate random serial number for CSR
-	serial := rand.bytes(16)!
+	_ := rand.bytes(16)!
 
 	csr := CSR{
 		version:             0 // PKCS#10 version 1
@@ -153,7 +154,7 @@ pub fn parse_csr(der_data []u8) !CSR {
 
 // parse_pem_csr parses a PEM-encoded CSR
 pub fn parse_pem_csr(pem_str string) !CSR {
-	block := encoding.pem_decode(pem_str)!
+	block := formats.pem_decode(pem_str)!
 
 	if block.type_ != 'CERTIFICATE REQUEST' && block.type_ != 'NEW CERTIFICATE REQUEST' {
 		return error('invalid PEM block type, expected CERTIFICATE REQUEST, got ${block.type_}')
@@ -175,7 +176,7 @@ pub fn (csr CSR) to_der() []u8 {
 // to_pem converts a CSR to PEM format
 pub fn (csr CSR) to_pem() string {
 	der := csr.to_der()
-	return encoding.pem_encode('CERTIFICATE REQUEST', {}, der)
+	return formats.pem_encode('CERTIFICATE REQUEST', {}, der)
 }
 
 // sign_csr signs a CSR with the issuer's private key
@@ -239,7 +240,7 @@ pub fn (mut csr CSR) add_extension(oid []int, critical bool, value []u8) {
 		}
 		oid_str += id.str()
 	}
-	attr_value := if critical { [u8(0xff)] } else { [u8(0x00)] }
+	mut attr_value := if critical { [u8(0xff)] } else { [u8(0x00)] }
 	attr_value << value
 	csr.attributes[oid_str] = attr_value
 }

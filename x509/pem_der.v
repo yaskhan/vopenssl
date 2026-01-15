@@ -1,7 +1,7 @@
 module x509
 
 import os
-import encoding
+import formats as enc
 import strings
 
 // CertificateFormat represents the format of a certificate
@@ -95,12 +95,12 @@ pub fn (cert X509Certificate) save_to_file(path string, format CertificateFormat
 
 // to_pem_file saves a certificate to a PEM file
 pub fn (cert X509Certificate) to_pem_file(path string) ! {
-	cert.save_to_file(path, .pem)
+	cert.save_to_file(path, .pem)!
 }
 
 // to_der_file saves a certificate to a DER file
 pub fn (cert X509Certificate) to_der_file(path string) ! {
-	cert.save_to_file(path, .der)
+	cert.save_to_file(path, .der)!
 }
 
 // load_csr loads a CSR from a file (PEM or DER)
@@ -142,12 +142,12 @@ pub fn (csr CSR) save_to_file(path string, format CertificateFormat) ! {
 
 // to_pem_file saves a CSR to a PEM file
 pub fn (csr CSR) to_pem_file(path string) ! {
-	csr.save_to_file(path, .pem)
+	csr.save_to_file(path, .pem)!
 }
 
 // to_der_file saves a CSR to a DER file
 pub fn (csr CSR) to_der_file(path string) ! {
-	csr.save_to_file(path, .der)
+	csr.save_to_file(path, .der)!
 }
 
 // load_certificate_bundle loads a certificate bundle from a file
@@ -208,12 +208,12 @@ pub fn (bundle CertificateBundle) save_to_file(path string) ! {
 
 // pem_from_der converts DER data to PEM format
 pub fn pem_from_der(der_data []u8, type_ string) string {
-	return encoding.pem_encode(type_, {}, der_data)
+	return enc.pem_encode(type_, {}, der_data)
 }
 
 // der_from_pem converts PEM data to DER format
 pub fn der_from_pem(pem_str string, expected_type string) ![]u8 {
-	block := encoding.pem_decode(pem_str)!
+	block := enc.pem_decode(pem_str)!
 	if expected_type != '' && block.type_ != expected_type {
 		return error('invalid PEM type, expected ${expected_type}, got ${block.type_}')
 	}
@@ -273,7 +273,7 @@ pub fn load_certificate_pair(cert_path string, key_path string) !CertificatePair
 	key_data := os.read_file(key_path)!
 
 	// Decode PEM key
-	block := encoding.pem_decode(key_data)!
+	block := enc.pem_decode(key_data)!
 	private_key := block.bytes
 
 	return CertificatePair{
@@ -286,9 +286,59 @@ pub fn load_certificate_pair(cert_path string, key_path string) !CertificatePair
 pub fn (pair CertificatePair) save_to_files(cert_path string, key_path string) ! {
 	pair.certificate.to_pem_file(cert_path)!
 
-	// Determine key type based on certificate
-	key_type := 'PRIVATE KEY'
-	// This is simplified - full implementation would detect RSA vs EC vs Ed25519
-	pem_data := encoding.pem_encode(key_type, {}, pair.private_key)
+	// Determine key type based on certificate public key OID
+	// The public_key field in X509Certificate is the DER-encoded SubjectPublicKeyInfo
+	
+	mut key_type := 'PRIVATE KEY' // Default to PKCS#8
+	
+	// Parse SubjectPublicKeyInfo to get AlgorithmIdentifier
+	// SubjectPublicKeyInfo ::= SEQUENCE {
+	//   algorithm AlgorithmIdentifier,
+	//   subjectPublicKey BIT STRING
+	// }
+	spki := pair.certificate.public_key
+	if spki.len > 0 && spki[0] == 0x30 {
+		mut offset := 1
+		len_bytes, lb_len := parse_asn1_length(spki[offset..]) or { 0, 0 }
+		if lb_len > 0 {
+			offset += lb_len
+			
+			// AlgorithmIdentifier SEQUENCE
+			if offset < spki.len && spki[offset] == 0x30 {
+				offset += 1
+				alg_len, alg_lb_len := parse_asn1_length(spki[offset..]) or { 0, 0 }
+				if alg_lb_len > 0 {
+					offset += alg_lb_len
+					
+					// OBJECT IDENTIFIER
+					if offset < spki.len && spki[offset] == 0x06 {
+						offset += 1
+						oid_len, oid_lb_len := parse_asn1_length(spki[offset..]) or { 0, 0 }
+						if oid_lb_len > 0 {
+							offset += oid_lb_len
+							if offset + oid_len <= spki.len {
+								oid_bytes := spki[offset..offset + oid_len]
+								
+								// Check OIDs
+								// RSA: 1.2.840.113549.1.1.1 (2a 86 48 86 f7 0d 01 01 01)
+								if oid_bytes == [u8(0x2a), 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01] {
+									key_type = 'RSA PRIVATE KEY'
+								}
+								// EC: 1.2.840.10045.2.1 (2a 86 48 ce 3d 02 01)
+								else if oid_bytes == [u8(0x2a), 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01] {
+									key_type = 'EC PRIVATE KEY'
+								}
+								// Ed25519: 1.3.101.112 (2b 65 70)
+								// Ed25519 keys are usually stored as standard PRIVATE KEY (PKCS#8)
+								// so we leave default for them.
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	pem_data := enc.pem_encode(key_type, {}, pair.private_key)
 	os.write_file(key_path, pem_data)!
 }
