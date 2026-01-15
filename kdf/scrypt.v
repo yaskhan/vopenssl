@@ -3,6 +3,7 @@ module scrypt
 import crypto.sha256
 import hash
 import vopenssl.mac
+import encoding.binary
 
 // ScryptParameters contains the parameters for Scrypt key derivation
 // Based on RFC 7914
@@ -31,31 +32,157 @@ pub fn scrypt(password []u8, salt []u8, params ScryptParameters, key_length int)
 		panic('key_length must be at least 1')
 	}
 
-	// Simplified implementation - use PBKDF2-SHA256 for key derivation
-	// In a full implementation, this would use ROMix with Salsa20/8
-	mut derived := []u8{cap: key_length}
+	mut b := pbkdf2_hmac_sha256(password, salt, 1, params.p * 128 * params.r)
+	
+	mut v := []u32{len: 32 * params.n * params.r}
+	mut xy := []u32{len: 64 * params.r}
+	
+	for i in 0 .. params.p {
+		smix(mut b[i * 128 * params.r..(i + 1) * 128 * params.r], params.r, params.n, mut v, mut xy)
+	}
+	
+	return pbkdf2_hmac_sha256(password, b, 1, key_length)
+}
 
-	for i in 0 .. params.n {
-		round_input := password + salt + u8(i)
-		round_salt := []u8{cap: 64}
-		for j in 0 .. 64 {
-			if j < salt.len {
-				round_salt << salt[j]
+fn smix(mut b []u8, r int, n int, mut v []u32, mut xy []u32) {
+	mut x := xy[0..32 * r]
+	mut y := xy[32 * r..]
+	
+	// Convert B to 32-bit integers
+	for i in 0 .. 32 * r {
+		x[i] = binary.little_endian_u32(b[i * 4..(i + 1) * 4])
+	}
+	
+	for i in 0 .. n {
+		// Copy X to V[i]
+		for k in 0 .. 32 * r {
+			v[i * 32 * r + k] = x[k]
+		}
+		block_mix(mut x, mut y, r)
+	}
+	
+	for i in 0 .. n {
+		mut j := int(x[32 * r - 16] & u32(n - 1))
+		for k in 0 .. 32 * r {
+			x[k] ^= v[j * 32 * r + k]
+		}
+		block_mix(mut x, mut y, r)
+	}
+	
+	// Convert X back to B
+	for i in 0 .. 32 * r {
+		binary.little_endian_put_u32(mut b, i * 4, x[i])
+	}
+}
+
+fn block_mix(mut b []u32, mut y []u32, r int) {
+	mut x := []u32{len: 16}
+	for i in 0 .. 16 {
+		x[i] = b[32 * r - 16 + i]
+	}
+	
+	for i in 0 .. 2 * r {
+		for j in 0 .. 16 {
+			x[j] ^= b[i * 16 + j]
+		}
+		salsa20_8(mut x)
+		
+		// Map into Y
+		if i % 2 == 0 {
+			for j in 0 .. 16 {
+				y[i / 2 * 16 + j] = x[j]
+			}
+		} else {
+			for j in 0 .. 16 {
+				y[(r + i / 2) * 16 + j] = x[j]
 			}
 		}
-
-		round_key := vopenssl.mac.hmac_sha256(round_salt, round_input)
-		derived << round_key
 	}
+	
+	for i in 0 .. 32 * r {
+		b[i] = y[i]
+	}
+}
 
-	// Extract final key
-	if derived.len >= key_length {
+fn salsa20_8(mut b []u32) {
+	mut x := b.clone()
+	for i in 0 .. 4 { // 8 rounds / 2
+		x[4] ^=  rotl((x[0] + x[12]), 7)
+		x[8] ^=  rotl((x[4] + x[0]), 9)
+		x[12] ^= rotl((x[8] + x[4]), 13)
+		x[0] ^=  rotl((x[12] + x[8]), 18)
+		
+		x[9] ^=  rotl((x[5] + x[1]), 7)
+		x[13] ^= rotl((x[9] + x[5]), 9)
+		x[1] ^=  rotl((x[13] + x[9]), 13)
+		x[5] ^=  rotl((x[1] + x[13]), 18)
+		
+		x[14] ^= rotl((x[10] + x[6]), 7)
+		x[2] ^=  rotl((x[14] + x[10]), 9)
+		x[6] ^=  rotl((x[2] + x[14]), 13)
+		x[10] ^= rotl((x[6] + x[2]), 18)
+		
+		x[3] ^=  rotl((x[15] + x[11]), 7)
+		x[7] ^=  rotl((x[3] + x[15]), 9)
+		x[11] ^= rotl((x[7] + x[3]), 13)
+		x[15] ^= rotl((x[11] + x[7]), 18)
+		
+		x[1] ^=  rotl((x[0] + x[3]), 7)
+		x[2] ^=  rotl((x[1] + x[0]), 9)
+		x[3] ^=  rotl((x[2] + x[1]), 13)
+		x[0] ^=  rotl((x[3] + x[2]), 18)
+		
+		x[6] ^=  rotl((x[5] + x[4]), 7)
+		x[7] ^=  rotl((x[6] + x[5]), 9)
+		x[4] ^=  rotl((x[7] + x[6]), 13)
+		x[5] ^=  rotl((x[4] + x[7]), 18)
+		
+		x[11] ^= rotl((x[10] + x[9]), 7)
+		x[8] ^=  rotl((x[11] + x[10]), 9)
+		x[9] ^=  rotl((x[8] + x[11]), 13)
+		x[10] ^= rotl((x[9] + x[8]), 18)
+		
+		x[12] ^= rotl((x[15] + x[14]), 7)
+		x[13] ^= rotl((x[12] + x[15]), 9)
+		x[14] ^= rotl((x[13] + x[12]), 13)
+		x[15] ^= rotl((x[14] + x[13]), 18)
+	}
+	for i in 0 .. 16 {
+		b[i] += x[i]
+	}
+}
+
+fn rotl(a u32, b int) u32 {
+	return (a << b) | (a >> (32 - b))
+}
+
+fn pbkdf2_hmac_sha256(password []u8, salt []u8, iterations int, key_length int) []u8 {
+	mut derived := []u8{cap: key_length}
+	block_count := (key_length + 31) / 32
+	
+	for i in 1 .. block_count + 1 {
+		mut u := []u8{}
+		u << salt
+		u << u8((i >> 24) & 0xff)
+		u << u8((i >> 16) & 0xff)
+		u << u8((i >> 8) & 0xff)
+		u << u8(i & 0xff)
+		
+		u = vopenssl.mac.hmac_sha256(password, u)
+		mut t := u.clone()
+		
+		for _ in 1 .. iterations {
+			u = vopenssl.mac.hmac_sha256(password, u)
+			for k in 0 .. u.len {
+				t[k] ^= u[k]
+			}
+		}
+		
+		derived << t
+	}
+	
+	if derived.len > key_length {
 		return derived[..key_length]
-	}
-
-	// Pad if necessary
-	for i in derived.len .. key_length {
-		derived << u8(0)
 	}
 	return derived
 }

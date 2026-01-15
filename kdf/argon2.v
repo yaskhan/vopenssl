@@ -1,6 +1,7 @@
 module kdf
 
 import crypto.blake2b
+import encoding.binary
 
 // Argon2Type represents the type of Argon2 algorithm
 pub enum Argon2Type {
@@ -146,16 +147,45 @@ fn initial_hash(password []u8, params Argon2Parameters, key_length int) [64]u8 {
 	return final
 }
 
-// g_compression performs the G compression function (simplified)
+// g_compression performs the G compression function
 fn g_compression(mut state []u8) {
-	// Simplified version of the G compression function
-	// Full implementation would use BLAKE2b permutation
-	for i in 0 .. state.len {
-		state[i] = rotl_byte(state[i], 7)
-		if i < 32 {
-			state[i] += state[i + 32]
-		}
+	// Convert state to 64-bit integers
+	mut v := []u64{len: 8}
+	for i in 0 .. 8 {
+		v[i] = binary.little_endian_u64(state[i * 8..(i + 1) * 8])
 	}
+
+	// Apply mixing rounds
+	// Since we only have 64 bytes (8 u64s) in this simplified core, 
+	// we perform enough rounds to mix them thoroughly.
+	for _ in 0 .. 10 {
+		mix(mut v[0], mut v[1], mut v[2], mut v[3])
+		mix(mut v[4], mut v[5], mut v[6], mut v[7])
+		mix(mut v[0], mut v[4], mut v[2], mut v[6])
+		mix(mut v[1], mut v[5], mut v[3], mut v[7])
+	}
+
+	// Write back to state
+	for i in 0 .. 8 {
+		binary.little_endian_put_u64(mut state, i * 8, v[i])
+	}
+}
+
+// mix is the BLAKE2 G mixing function
+fn mix(mut a u64, mut b u64, mut c u64, mut d u64) {
+	a = a + b
+	d = rotr64(d ^ a, 32)
+	c = c + d
+	b = rotr64(b ^ c, 24)
+	a = a + b
+	d = rotr64(d ^ a, 16)
+	c = c + d
+	b = rotr64(b ^ c, 63)
+}
+
+// rotr64 performs a right rotation on a 64-bit integer
+fn rotr64(x u64, n int) u64 {
+	return (x >> u64(n)) | (x << u64(64 - n))
 }
 
 // extract_tag extracts the final tag from the state
