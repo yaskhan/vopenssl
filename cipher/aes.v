@@ -36,7 +36,7 @@ pub fn new_aes_cipher(key []u8, mode CipherMode) !AESCipher {
 	iv := rand.generate_iv(iv_size)!
 
 	if mode == .gcm {
-		return error('GCM mode not yet implemented in Phase 1')
+		return new_aes_gcm(key)
 	}
 
 	return AESCipher{
@@ -55,7 +55,14 @@ pub fn new_aes_cipher(key []u8, mode CipherMode) !AESCipher {
 // ciphertext := cipher.encrypt(plaintext)!
 // ```
 pub fn new_aes_gcm(key []u8) !AESCipher {
-	return error('GCM mode not yet implemented in Phase 1')
+	if key.len != 16 && key.len != 24 && key.len != 32 {
+		return error('invalid AES key size: must be 16, 24, or 32 bytes')
+	}
+	return AESCipher{
+		mode: .gcm
+		key:  key
+		iv:   rand.generate_iv(12)!
+	}
 }
 
 // new_aes_cbc creates a new AES-CBC cipher.
@@ -130,12 +137,45 @@ pub fn (mut c AESCipher) decrypt(ciphertext []u8) ![]u8 {
 
 // encrypt_gcm encrypts using AES-GCM (authenticated encryption)
 fn (mut c AESCipher) encrypt_gcm(plaintext []u8) ![]u8 {
-	return error('GCM mode not implemented')
+	ciphertext, tag := gcm_encrypt_decrypt(c.key, c.iv, plaintext, []u8{}, true)!
+	
+	mut result := []u8{len: c.iv.len + ciphertext.len + tag.len}
+	copy(mut result, c.iv)
+	copy(mut result[c.iv.len..], ciphertext)
+	copy(mut result[c.iv.len + ciphertext.len..], tag)
+	
+	// Generate new IV for next encryption
+	c.iv = rand.generate_iv(12)!
+	
+	return result
 }
 
 // decrypt_gcm decrypts using AES-GCM (authenticated encryption)
 fn (mut c AESCipher) decrypt_gcm(ciphertext []u8) ![]u8 {
-	return error('GCM mode not implemented')
+	if ciphertext.len < 12 + 16 {
+		return error('ciphertext too short for GCM')
+	}
+	
+	nonce := ciphertext[..12]
+	tag := ciphertext[ciphertext.len - 16..]
+	encrypted := ciphertext[12..ciphertext.len - 16]
+	
+	plaintext, calculated_tag := gcm_encrypt_decrypt(c.key, nonce, encrypted, []u8{}, false)!
+	
+	// Verify tag
+	mut match_found := true
+	for i in 0 .. 16 {
+		if tag[i] != calculated_tag[i] {
+			match_found = false
+			break
+		}
+	}
+	
+	if !match_found {
+		return error('GCM authentication failed')
+	}
+	
+	return plaintext
 }
 
 // encrypt_cbc encrypts using AES-CBC

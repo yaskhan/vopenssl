@@ -2,6 +2,7 @@ module tls
 
 import net
 import time
+import vopenssl.ecc
 
 pub enum ConnectionState {
 	idle
@@ -53,6 +54,21 @@ mut:
 	cipher_suite   ?CipherSuite
 	record_layer   RecordLayer
 	handshake_hash []u8
+	master_secret  []u8
+	client_random  []u8
+	server_random  []u8
+	
+	// TLS 1.3 Secrets
+	shared_secret                     []u8
+	handshake_secret                  []u8
+	client_handshake_traffic_secret   []u8
+	server_handshake_traffic_secret   []u8
+	client_application_traffic_secret []u8
+	server_application_traffic_secret []u8
+	
+	// Ephemeral key (for TLS 1.3 key share)
+	client_key_pair ?ecc.ECKeyPair
+	
 	is_client      bool
 	server_name    string
 pub mut:

@@ -398,3 +398,31 @@ pub fn parse_handshake_message(data []u8) !HandshakeMessage {
 		data:     msg_data
 	}
 }
+
+// parse_certificate_verify parses CertificateVerify from bytes
+pub fn parse_certificate_verify(data []u8) !CertificateVerify {
+	if data.len < 4 {
+		return error('CertificateVerify too short')
+	}
+
+	mut offset := 0
+
+	// Signature Algorithm (2 bytes)
+	sig_alg := binary.big_endian_u16(data[offset..offset + 2])
+	offset += 2
+
+	// Signature Length (2 bytes)
+	sig_len := int(binary.big_endian_u16(data[offset..offset + 2]))
+	offset += 2
+
+	if offset + sig_len > data.len {
+		return error('signature truncated')
+	}
+
+	signature := data[offset..offset + sig_len].clone()
+
+	return CertificateVerify{
+		signature_algorithm: sig_alg
+		signature:           signature
+	}
+}

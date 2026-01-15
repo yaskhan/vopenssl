@@ -1,6 +1,7 @@
 module tls
 
 import crypto.sha256
+import crypto.hmac
 import encoding.binary
 
 // client_handshake_tls12 performs the TLS 1.2 client handshake
@@ -145,6 +146,10 @@ fn (mut tc TLSConnection) send_client_hello_tls12() ! {
 	}
 
 	client_hello := create_client_hello(version_tls_12, tc.config.cipher_suites, extensions)!
+	
+	// Store client random
+	tc.client_random = client_hello.random.clone()
+
 	hello_data := serialize_client_hello(client_hello)
 	handshake_msg := create_handshake_message(handshake_type_client_hello, hello_data)
 	serialized := serialize_handshake_message(handshake_msg)
@@ -161,6 +166,10 @@ fn (mut tc TLSConnection) send_server_hello_tls12(cipher_suite u16) ! {
 	extensions := []Extension{}
 
 	server_hello := create_server_hello(version_tls_12, cipher_suite, extensions)!
+	
+	// Store server random
+	tc.server_random = server_hello.random.clone()
+
 	hello_data := serialize_server_hello(server_hello)
 	handshake_msg := create_handshake_message(handshake_type_server_hello, hello_data)
 	serialized := serialize_handshake_message(handshake_msg)
@@ -174,20 +183,40 @@ fn (mut tc TLSConnection) send_server_hello_tls12(cipher_suite u16) ! {
 
 // compute_master_secret_tls12 computes the TLS 1.2 master secret
 fn (tc TLSConnection) compute_master_secret_tls12(pre_master_secret []u8, client_random []u8, server_random []u8) []u8 {
-	// Simplified PRF implementation
-	// In a full implementation, this would use the proper TLS 1.2 PRF function
 	mut seed := []u8{}
-	seed << 'master secret'.bytes()
 	seed << client_random
 	seed << server_random
 
-	// Simple hash-based key derivation (not the real TLS PRF)
-	mut hash_input := []u8{}
-	hash_input << pre_master_secret
-	hash_input << seed
+	return prf_tls12(pre_master_secret, 'master secret', seed, 48)
+}
 
-	master_secret := sha256.sum(hash_input)
-	return master_secret[..48] // Master secret is 48 bytes
+// prf_tls12 implements the TLS 1.2 Pseudo-Random Function (P_SHA256)
+fn prf_tls12(secret []u8, label string, seed []u8, length int) []u8 {
+	label_bytes := label.bytes()
+	mut label_seed := []u8{}
+	label_seed << label_bytes
+	label_seed << seed
+
+	return p_sha256(secret, label_seed, length)
+}
+
+// p_sha256 implements the P_hash function using SHA-256
+fn p_sha256(secret []u8, seed []u8, length int) []u8 {
+	mut result := []u8{}
+	mut a := hmac.new(secret, seed, sha256.sum, sha256.block_size)
+	
+	for result.len < length {
+		a = hmac.new(secret, a, sha256.sum, sha256.block_size)
+		
+		mut input := []u8{}
+		input << a
+		input << seed
+		
+		output := hmac.new(secret, input, sha256.sum, sha256.block_size)
+		result << output
+	}
+	
+	return result[..length]
 }
 
 // send_finished_tls12 sends the Finished message for TLS 1.2
@@ -204,18 +233,62 @@ fn (mut tc TLSConnection) send_finished_tls12() ! {
 	record := create_record(content_type_handshake, tc.version, serialized)!
 	encrypted := tc.record_layer.encrypt_record(record)!
 	tc.conn.write(write_record(encrypted))!
+
+	// Update handshake hash with the Finished message we just sent
+	tc.update_handshake_hash(serialized)
 }
 
 // receive_finished_tls12 receives and verifies the Finished message for TLS 1.2
 fn (mut tc TLSConnection) receive_finished_tls12() ! {
-	// Simplified - in a full implementation, would read and verify
+	// Read verify_data first, before reading the message which updates the transcript
+	expected_verify_data := tc.compute_verify_data_tls12()
+
+	// Read record
+	mut record_header := []u8{len: 5}
+	_ := tc.conn.read(mut record_header)!
+
+	mut length := int(record_header[3]) << 8 | int(record_header[4])
+	mut fragment := []u8{len: length}
+	_ := tc.conn.read(mut fragment)!
+
+	// Create a record from the fragment
+	record := TLSRecord{
+		content_type: record_header[0]
+		version:      u16(record_header[1]) << 8 | u16(record_header[2])
+		length:       u16(length)
+		fragment:     fragment
+	}
+
+	// Decrypt the record
+	decrypted := tc.record_layer.decrypt_record(record)!
+
+	if decrypted.content_type != content_type_handshake {
+		return error('expected handshake message (Finished), got content type ${decrypted.content_type}')
+	}
+
+	// Parse handshake message
+	handshake_msg := parse_handshake_message(decrypted.fragment)!
+
+	if handshake_msg.msg_type != handshake_type_finished {
+		return error('expected Finished message, got message type ${handshake_msg.msg_type}')
+	}
+
+	// Verify the data
+	if handshake_msg.data != expected_verify_data {
+		return error('Finished message verification failed')
+	}
+
+	// Update handshake hash with the received Finished message
+	// Note: We use the DECRYPTED handshake message for the hash updates
+	tc.update_handshake_hash(decrypted.fragment)
 }
 
 // compute_verify_data_tls12 computes the verify_data for TLS 1.2 Finished message
 fn (tc TLSConnection) compute_verify_data_tls12() []u8 {
-	// Simplified implementation
-	hash := sha256.sum(tc.handshake_hash)
-	return hash[..12] // Verify data is 12 bytes for TLS 1.2
+	label := if tc.is_client { 'client finished' } else { 'server finished' }
+	seed := sha256.sum(tc.handshake_hash)
+	
+	return prf_tls12(tc.master_secret, label, seed[..], 12)
 }
 
 // select_cipher_suite_tls12 selects a cipher suite for TLS 1.2

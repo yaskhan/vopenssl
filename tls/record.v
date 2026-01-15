@@ -1,6 +1,7 @@
 module tls
 
 import encoding.binary
+import vopenssl.cipher
 
 pub struct TLSRecord {
 pub:
@@ -114,37 +115,140 @@ pub fn split_into_records(content_type u8, version u16, data []u8) []TLSRecord {
 
 // encrypt_record encrypts a TLS record using the active cipher suite
 pub fn (mut rl RecordLayer) encrypt_record(record TLSRecord) !TLSRecord {
-	cipher_suite := rl.cipher_suite or { return TLSRecord{
-		...record
-	} }
+	if rl.cipher_suite == none {
+		return TLSRecord{
+			...record
+		}
+	}
 
-	// For now, return unencrypted (encryption would use cipher module)
-	// In a full implementation, this would:
-	// 1. Apply MAC (for non-AEAD ciphers)
-	// 2. Encrypt the fragment
-	// 3. Update sequence number
+	// Calculate nonce: IV XOR Sequence Number (padded)
+	mut nonce := rl.write_iv.clone()
+	for i := 0; i < 8; i++ {
+		nonce[nonce.len - 1 - i] ^= u8(rl.sequence_number >> (i * 8))
+	}
+
+	// Construct AAD
+	// TLS 1.3: opaque_type + legacy_record_version + length
+	// We assume TLS 1.3 for now as per context
+	mut aad := []u8{len: 5}
+	aad[0] = 23 // opaque_type (application_data)
+	binary.big_endian_put_u16(mut aad[1..3], record.version)
+	
+	// Payload includes content type byte for TLS 1.3 inner plaintext
+	// And tag expansion
+	plaintext_len := record.fragment.len + 1 // + inner content type
+	tag_len := 16 // GCM tag length
+	encrypted_len := plaintext_len + tag_len
+	binary.big_endian_put_u16(mut aad[3..5], u16(encrypted_len))
+
+	// Construct plaintext (TLS 1.3 InnerPlaintext)
+	mut plaintext := record.fragment.clone()
+	plaintext << record.content_type // Inner content type
+	
+	// Encrypt
+	ciphertext, tag := match rl.cipher_suite?.bulk_cipher {
+		.chacha20_poly1305 {
+			// ChaCha20-Poly1305 returns Ciphertext || Tag directly
+			result := cipher.aead_chacha20_poly1305_encrypt(rl.write_key, nonce, aad, plaintext)!
+			// Split for consistency with GCM logic below (or just adapt logic)
+			result[..result.len - 16], result[result.len - 16..]
+		}
+		else {
+			// Default to GCM (AES-128-GCM or AES-256-GCM)
+			cipher.gcm_encrypt_decrypt(rl.write_key, nonce, plaintext, aad, true)!
+		}
+	}
+	
+	mut full_ciphertext := ciphertext.clone()
+	full_ciphertext << tag
 
 	rl.sequence_number++
+
+	// TLS 1.3 records look like Application Data (23) externally
 	return TLSRecord{
-		...record
+		content_type: 23 // application_data
+		version:      record.version // wrapper version (usually 0x0303)
+		length:       u16(full_ciphertext.len)
+		fragment:     full_ciphertext
 	}
 }
 
 // decrypt_record decrypts a TLS record using the active cipher suite
 pub fn (mut rl RecordLayer) decrypt_record(record TLSRecord) !TLSRecord {
-	cipher_suite := rl.cipher_suite or { return TLSRecord{
-		...record
-	} }
+	if rl.cipher_suite == none {
+		return TLSRecord{
+			...record
+		}
+	}
 
-	// For now, return unencrypted (decryption would use cipher module)
-	// In a full implementation, this would:
-	// 1. Decrypt the fragment
-	// 2. Verify MAC (for non-AEAD ciphers)
-	// 3. Update sequence number
+	// Calculate nonce
+	mut nonce := rl.read_iv.clone()
+	for i := 0; i < 8; i++ {
+		nonce[nonce.len - 1 - i] ^= u8(rl.sequence_number >> (i * 8))
+	}
+
+	// Construct AAD
+	mut aad := []u8{len: 5}
+	aad[0] = record.content_type
+	binary.big_endian_put_u16(mut aad[1..3], record.version)
+	binary.big_endian_put_u16(mut aad[3..5], record.length)
+
+	if record.fragment.len < 16 {
+		return error('record too short for authentication tag')
+	}
+
+	// Split tag
+	tag := record.fragment[record.fragment.len - 16..]
+	ciphertext := record.fragment[..record.fragment.len - 16]
+
+	// Decrypt
+	plaintext, calculated_tag := match rl.cipher_suite?.bulk_cipher {
+		.chacha20_poly1305 {
+			// ChaCha20-Poly1305 decrypt returns plaintext and verifies tag internally
+			combined := record.fragment.clone() // already has tag at end
+			pt := cipher.aead_chacha20_poly1305_decrypt(rl.read_key, nonce, aad, combined)!
+			// Return plaintext and the tag extracted from input (for consistency with GCM flow)
+			pt, tag
+		}
+		else {
+			// Default to GCM
+			cipher.gcm_encrypt_decrypt(rl.read_key, nonce, ciphertext, aad, false)!
+		}
+	}
+
+	// Verify tag (GCM does it here manually, ChaCha already did it but we simulate match for flow consistency or refactor)
+	if rl.cipher_suite?.bulk_cipher != .chacha20_poly1305 {
+		mut match_found := true
+		for i in 0 .. 16 {
+			if tag[i] != calculated_tag[i] {
+				match_found = false
+				break
+			}
+		}
+		if !match_found {
+			return error('bad_record_mac')
+		}
+	}
+
+	// Remove padding and extract inner content type (TLS 1.3)
+	// Scan from end for non-zero byte
+	mut i := plaintext.len - 1
+	for i >= 0 && plaintext[i] == 0 {
+		i--
+	}
+	if i < 0 {
+		return error('unexpected_message: zero-length fragment')
+	}
+	content_type := plaintext[i]
+	fragment := plaintext[..i]
 
 	rl.sequence_number++
+
 	return TLSRecord{
-		...record
+		content_type: content_type
+		version:      record.version
+		length:       u16(fragment.len)
+		fragment:     fragment
 	}
 }
 

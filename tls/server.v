@@ -257,6 +257,12 @@ pub fn (mut tc TLSConnection) receive_client_key_exchange() ! {
 
 	// Extract pre-master secret and derive keys
 	// (simplified - would actually decrypt/process the exchange keys)
+	// For now, using a placeholder pre-master secret to match the simplified client
+	pre_master_secret := []u8{len: 48}
+
+	if tc.version == version_tls_12 {
+		tc.master_secret = tc.compute_master_secret_tls12(pre_master_secret, tc.client_random, tc.server_random)
+	}
 }
 
 // send_certificate_verify sends the CertificateVerify message
