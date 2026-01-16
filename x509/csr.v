@@ -2,7 +2,6 @@ module x509
 
 import formats
 import rand
-import hash
 
 // CSR represents a Certificate Signing Request (PKCS#10)
 pub struct CSR {
@@ -245,26 +244,3 @@ pub fn (mut csr CSR) add_extension(oid []int, critical bool, value []u8) {
 	csr.attributes[oid_str] = attr_value
 }
 
-// parse_asn1_length helper for parsing ASN.1 length fields
-fn parse_asn1_length(data []u8) !(int, int) {
-	if data.len == 0 {
-		return error('empty length')
-	}
-	b := data[0]
-	if b & 0x80 == 0 {
-		return int(b), 1
-	}
-	num_bytes := int(b & 0x7f)
-	if data.len < 1 + num_bytes {
-		return error('truncated length')
-	}
-	if num_bytes > 4 {
-		return error('length too large')
-	}
-
-	mut length := 0
-	for i in 0 .. num_bytes {
-		length = (length << 8) | int(data[1 + i])
-	}
-	return length, 1 + num_bytes
-}

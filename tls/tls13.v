@@ -4,8 +4,8 @@ import crypto.sha256
 import crypto.hmac
 import encoding.binary
 import vopenssl.kdf
-import vopenssl.ecc
-import vopenssl.hash
+import vopenssl.ecc as vecc
+import vopenssl.hash as vhash
 
 // client_handshake_tls13 performs the TLS 1.3 client handshake
 pub fn (mut tc TLSConnection) client_handshake_tls13() ! {
@@ -124,7 +124,7 @@ fn (mut tc TLSConnection) send_client_hello_tls13() ! {
 
 	// Key Share
 	// Generate X25519 key pair
-	key_pair := ecc.generate_key_pair(.x25519)!
+	key_pair := vecc.generate_key_pair(.x25519)!
 	tc.client_key_pair = key_pair
 	
 	mut key_share_data := []u8{}

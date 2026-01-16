@@ -4,7 +4,6 @@ import crypto.rand
 import crypto.ed25519 as crypto_ed25519
 import math.big
 import ecc.vecdsa
-import hash
 
 // ECPublicKey represents an Elliptic Curve public key.
 pub struct ECPublicKey {
@@ -274,21 +273,18 @@ fn generate_x25519_key_pair() !ECKeyPair {
 	basepoint[0] = 9
 	public := x25519_scalarmult(private, basepoint)!
 
+	public_struct := ECPublicKey{
+		curve: .x25519
+		x:     public
+		y:     []u8{}
+	}
 	return ECKeyPair{
 		private: ECPrivateKey{
 			curve:   .x25519
 			private: private
-			public:  ECPublicKey{
-				curve: .x25519
-				x:     public
-				y:     []u8{}
-			}
+			public:  public_struct
 		}
-		public:  ECPublicKey{
-			curve: .x25519
-			x:     public
-			y:     []u8{}
-		}
+		public: public_struct
 	}
 }
 

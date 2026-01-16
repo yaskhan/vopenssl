@@ -1,12 +1,12 @@
 module vopenssl
 
-// Импорты подмодулей
 import rsa
 import ecc
 import ed25519
 import x509
 import tls
-import kdf
+import kdf as kdf_
+import crypto.pbkdf2
 
 // VOpenSSL - High-level cryptographic library for V
 //
@@ -159,35 +159,35 @@ pub fn ed25519_verify(public_key Ed25519PublicKey, message []u8, signature []u8)
 }
 
 // Re-export X.509 functions
-pub fn parse_x509_certificate(der_data []u8) !X509Certificate {
+pub fn parse_x509_certificate(der_data []u8) !x509.X509Certificate {
 	return x509.parse_certificate(der_data)
 }
 
-pub fn parse_pem_x509_certificate(pem_str string) !X509Certificate {
+pub fn parse_pem_x509_certificate(pem_str string) !x509.X509Certificate {
 	return x509.parse_pem_certificate(pem_str)
 }
 
-pub fn load_x509_certificate(path string) !X509Certificate {
+pub fn load_x509_certificate(path string) !x509.X509Certificate {
 	return x509.load_certificate(path)
 }
 
-pub fn create_csr(subject X509Name, public_key []u8, private_key []u8, signature_alg []int) !CSR {
+pub fn create_csr(subject X509Name, public_key []u8, private_key []u8, signature_alg []int) !x509.CSR {
 	return x509.create_csr(subject, public_key, private_key, signature_alg)
 }
 
-pub fn parse_csr(der_data []u8) !CSR {
+pub fn parse_csr(der_data []u8) !x509.CSR {
 	return x509.parse_csr(der_data)
 }
 
-pub fn parse_pem_csr(pem_str string) !CSR {
+pub fn parse_pem_csr(pem_str string) !x509.CSR {
 	return x509.parse_pem_csr(pem_str)
 }
 
-pub fn load_csr(path string) !CSR {
+pub fn load_csr(path string) !x509.CSR {
 	return x509.load_csr(path)
 }
 
-pub fn validate_x509_certificate(cert X509Certificate, intermediates []X509Certificate, opts ValidationOptions) !ValidationResult {
+pub fn validate_x509_certificate(cert X509Certificate, intermediates []X509Certificate, opts ValidationOptions) !x509.ValidationResult {
 	return x509.validate_certificate(cert, intermediates, opts)
 }
 
@@ -199,7 +199,7 @@ pub fn validate_x509_host(cert X509Certificate, host string) !bool {
 	return x509.validate_host(cert, host)
 }
 
-pub fn sign_x509_csr(csr CSR, issuer_cert X509Certificate, issuer_priv_key []u8, validity X509Validity) !X509Certificate {
+pub fn sign_x509_csr(csr CSR, issuer_cert X509Certificate, issuer_priv_key []u8, validity X509Validity) !x509.X509Certificate {
 	return x509.sign_csr(csr, issuer_cert, issuer_priv_key, validity)
 }
 
@@ -211,19 +211,19 @@ pub type CipherSuite = tls.CipherSuite
 pub type ConnectionState = tls.ConnectionState
 
 // KDF types
-pub type PBKDF2Parameters = kdf.PBKDF2Parameters
-pub type HKDFParameters = kdf.HKDFParameters
-pub type ScryptParameters = kdf.ScryptParameters
-pub type Argon2Type = kdf.Argon2Type
-pub type Argon2Version = kdf.Argon2Version
-pub type Argon2Parameters = kdf.Argon2Parameters
+pub type PBKDF2Parameters = kdf_.PBKDF2Parameters
+pub type HKDFParameters = kdf_.HKDFParameters
+pub type ScryptParameters = kdf_.ScryptParameters
+pub type Argon2Type = kdf_.Argon2Type
+pub type Argon2Version = kdf_.Argon2Version
+pub type Argon2Parameters = kdf_.Argon2Parameters
 
 // Re-export TLS functions
-pub fn tls_dial(address string, config TLSConfig) !TLSConnection {
+pub fn tls_dial(address string, config tls.TLSConfig) !tls.TLSConnection {
 	return tls.dial(address, config)
 }
 
-pub fn tls_listen(address string, config TLSConfig) !TLSListener {
+pub fn tls_listen(address string, config tls.TLSConfig) !tls.TLSListener {
 	return tls.listen(address, config)
 }
 
@@ -233,72 +233,72 @@ pub fn tls_version_string(version u16) string {
 
 // Re-export PBKDF2 functions
 pub fn kdf_pbkdf2(password []u8, params PBKDF2Parameters) []u8 {
-	return kdf.pbkdf2(password, params)
+	return kdf_.pbkdf2(password, params)
 }
 
 pub fn kdf_pbkdf2_hmac_sha256(password []u8, salt []u8, iterations int, key_length int) []u8 {
-	return kdf.pbkdf2_hmac_sha256(password, salt, iterations, key_length)
+	return kdf_.pbkdf2_hmac_sha256(password, salt, iterations, key_length)
 }
 
 pub fn kdf_pbkdf2_hmac_sha512(password []u8, salt []u8, iterations int, key_length int) []u8 {
-	return kdf.pbkdf2_hmac_sha512(password, salt, iterations, key_length)
+	return kdf_.pbkdf2_hmac_sha512(password, salt, iterations, key_length)
 }
 
 pub fn kdf_pbkdf2_string(password string, params PBKDF2Parameters) []u8 {
-	return kdf.pbkdf2_string(password, params)
+	return kdf_.pbkdf2_string(password, params)
 }
 
 pub fn kdf_pbkdf2_verify(password []u8, derived_key []u8, params PBKDF2Parameters) bool {
-	return kdf.pbkdf2_verify(password, derived_key, params)
+	return kdf_.pbkdf2_verify(password, derived_key, params)
 }
 
 // Re-export HKDF functions
 pub fn kdf_hkdf(ikm []u8, l int, params HKDFParameters) []u8 {
-	return kdf.hkdf(ikm, l, params)
+	return kdf_.hkdf(ikm, l, params)
 }
 
 pub fn kdf_hkdf_sha256(ikm []u8, l int, salt []u8, info []u8) []u8 {
-	return kdf.hkdf_sha256(ikm, l, salt, info)
+	return kdf_.hkdf_sha256(ikm, l, salt, info)
 }
 
 pub fn kdf_hkdf_sha512(ikm []u8, l int, salt []u8, info []u8) []u8 {
-	return kdf.hkdf_sha512(ikm, l, salt, info)
+	return kdf_.hkdf_sha512(ikm, l, salt, info)
 }
 
 pub fn kdf_hkdf_string(ikm string, l int, params HKDFParameters) []u8 {
-	return kdf.hkdf_string(ikm, l, params)
+	return kdf_.hkdf_string(ikm, l, params)
 }
 
 pub fn kdf_hkdf_derive_keys(secret []u8, key_lengths []int, params HKDFParameters) [][]u8 {
-	return kdf.hkdf_derive_keys(secret, key_lengths, params)
+	return kdf_.hkdf_derive_keys(secret, key_lengths, params)
 }
 
 // Re-export Scrypt functions
 pub fn kdf_scrypt(password []u8, salt []u8, params ScryptParameters, key_length int) []u8 {
-	return kdf.scrypt(password, salt, params, key_length)
+	return kdf_.scrypt(password, salt, params, key_length)
 }
 
 pub fn kdf_scrypt_string(password string, salt []u8, params ScryptParameters, key_length int) []u8 {
-	return kdf.scrypt_string(password, salt, params, key_length)
+	return kdf_.scrypt_string(password, salt, params, key_length)
 }
 
 pub fn kdf_scrypt_verify(password []u8, derived_key []u8, salt []u8, params ScryptParameters) bool {
-	return kdf.scrypt_verify(password, derived_key, salt, params)
+	return kdf_.scrypt_verify(password, derived_key, salt, params)
 }
 
 // Re-export Argon2 functions
-pub fn kdf_argon2(password []u8, key_length int, params Argon2Parameters) []u8 {
-	return kdf.argon2(password, key_length, params)
+pub fn kdf_argon2(password []u8, key_length int, params Argon2Parameters) ![]u8 {
+	return kdf_.argon2(password, key_length, params)
 }
 
-pub fn kdf_argon2_string(password string, key_length int, params Argon2Parameters) []u8 {
-	return kdf.argon2_string(password, key_length, params)
+pub fn kdf_argon2_string(password string, key_length int, params Argon2Parameters) ![]u8 {
+	return kdf_.argon2_string(password, key_length, params)
 }
 
 pub fn kdf_argon2_verify(password []u8, derived_key []u8, params Argon2Parameters) bool {
-	return kdf.argon2_verify(password, derived_key, params)
+	return kdf_.argon2_verify(password, derived_key, params)
 }
 
 pub fn kdf_argon2id_default(password []u8, salt []u8, key_length int) []u8 {
-	return kdf.argon2id_default(password, salt, key_length)
+	return kdf_.argon2id_default(password, salt, key_length)
 }

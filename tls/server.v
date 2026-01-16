@@ -22,6 +22,7 @@ pub fn listen(address string, config TLSConfig) !TLSListener {
 }
 
 pub struct TLSListener {
+pub mut:
 	listener net.TcpListener
 	config   TLSConfig
 }

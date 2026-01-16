@@ -1,7 +1,7 @@
 module tls
 
 import encoding.binary
-import rand as vrand
+import vopenssl.rand
 
 pub struct HandshakeMessage {
 pub:
@@ -78,7 +78,7 @@ pub fn create_client_hello(version u16, cipher_suites []u16, extensions []Extens
 	// Generate 32 random bytes
 	mut random := []u8{len: 32}
 	for i in 0 .. 32 {
-		random[i] = u8(vrand.int_in_range(0, 256) or { 0 })
+		random[i] = u8(rand.int_in_range(0, 256) or { 0 })
 	}
 
 	return ClientHello{
@@ -96,7 +96,7 @@ pub fn create_server_hello(version u16, cipher_suite u16, extensions []Extension
 	// Generate 32 random bytes
 	mut random := []u8{len: 32}
 	for i in 0 .. 32 {
-		random[i] = u8(vrand.int_in_range(0, 256) or { 0 })
+		random[i] = u8(rand.int_in_range(0, 256) or { 0 })
 	}
 
 	return ServerHello{

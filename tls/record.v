@@ -115,11 +115,7 @@ pub fn split_into_records(content_type u8, version u16, data []u8) []TLSRecord {
 
 // encrypt_record encrypts a TLS record using the active cipher suite
 pub fn (mut rl RecordLayer) encrypt_record(record TLSRecord) !TLSRecord {
-	if rl.cipher_suite == none {
-		return TLSRecord{
-			...record
-		}
-	}
+	cs := rl.cipher_suite or { return TLSRecord{...record} }
 
 	// Calculate nonce: IV XOR Sequence Number (padded)
 	mut nonce := rl.write_iv.clone()
@@ -146,7 +142,7 @@ pub fn (mut rl RecordLayer) encrypt_record(record TLSRecord) !TLSRecord {
 	plaintext << record.content_type // Inner content type
 	
 	// Encrypt
-	ciphertext, tag := match rl.cipher_suite?.bulk_cipher {
+	ciphertext, tag := match cs.bulk_cipher {
 		.chacha20_poly1305 {
 			// ChaCha20-Poly1305 returns Ciphertext || Tag directly
 			result := cipher.aead_chacha20_poly1305_encrypt(rl.write_key, nonce, aad, plaintext)!
@@ -201,8 +197,10 @@ pub fn (mut rl RecordLayer) decrypt_record(record TLSRecord) !TLSRecord {
 	tag := record.fragment[record.fragment.len - 16..]
 	ciphertext := record.fragment[..record.fragment.len - 16]
 
+	cs := rl.cipher_suite or { return error('no cipher suite') }
+
 	// Decrypt
-	plaintext, calculated_tag := match rl.cipher_suite?.bulk_cipher {
+	plaintext, calculated_tag := match cs.bulk_cipher {
 		.chacha20_poly1305 {
 			// ChaCha20-Poly1305 decrypt returns plaintext and verifies tag internally
 			combined := record.fragment.clone() // already has tag at end
@@ -217,7 +215,7 @@ pub fn (mut rl RecordLayer) decrypt_record(record TLSRecord) !TLSRecord {
 	}
 
 	// Verify tag (GCM does it here manually, ChaCha already did it but we simulate match for flow consistency or refactor)
-	if rl.cipher_suite?.bulk_cipher != .chacha20_poly1305 {
+	if cs.bulk_cipher != .chacha20_poly1305 {
 		mut match_found := true
 		for i in 0 .. 16 {
 			if tag[i] != calculated_tag[i] {

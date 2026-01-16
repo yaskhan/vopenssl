@@ -5,6 +5,7 @@ import hash
 
 // HKDFParameters contains the parameters for HKDF key derivation
 pub struct HKDFParameters {
+pub mut:
 	algorithm hash.HashAlgorithm
 	salt      []u8 // optional salt (can be empty)
 	info      []u8 // optional context/application info
@@ -98,7 +99,7 @@ pub fn hkdf_string_sha256(ikm string, l int, salt []u8, info []u8) []u8 {
 
 // hkdf_derive_keys derives multiple keys of different lengths from a single secret
 pub fn hkdf_derive_keys(secret []u8, key_lengths []int, params HKDFParameters) [][]u8 {
-	total_length := 0
+	mut total_length := 0
 	for length in key_lengths {
 		total_length += length
 	}
@@ -147,6 +148,7 @@ fn hash_length(algorithm hash.HashAlgorithm) int {
 		.blake2b_512 { 64 }
 		.blake2s_256 { 32 }
 		.md5 { 16 }
+		else { 32 }
 	}
 }
 

@@ -1,4 +1,4 @@
-module scrypt
+module kdf
 
 import crypto.sha256
 import hash
@@ -8,6 +8,7 @@ import encoding.binary
 // ScryptParameters contains the parameters for Scrypt key derivation
 // Based on RFC 7914
 pub struct ScryptParameters {
+pub mut:
 	n int // CPU/memory cost parameter (must be a power of 2 > 1)
 	r int // Block size parameter
 	p int // Parallelization parameter
@@ -71,7 +72,7 @@ fn smix(mut b []u8, r int, n int, mut v []u32, mut xy []u32) {
 	
 	// Convert X back to B
 	for i in 0 .. 32 * r {
-		binary.little_endian_put_u32(mut b, i * 4, x[i])
+		binary.little_endian_put_u32(mut b[i * 4..], x[i])
 	}
 }
 
@@ -156,36 +157,6 @@ fn rotl(a u32, b int) u32 {
 	return (a << b) | (a >> (32 - b))
 }
 
-fn pbkdf2_hmac_sha256(password []u8, salt []u8, iterations int, key_length int) []u8 {
-	mut derived := []u8{cap: key_length}
-	block_count := (key_length + 31) / 32
-	
-	for i in 1 .. block_count + 1 {
-		mut u := []u8{}
-		u << salt
-		u << u8((i >> 24) & 0xff)
-		u << u8((i >> 16) & 0xff)
-		u << u8((i >> 8) & 0xff)
-		u << u8(i & 0xff)
-		
-		u = vopenssl.mac.hmac_sha256(password, u)
-		mut t := u.clone()
-		
-		for _ in 1 .. iterations {
-			u = vopenssl.mac.hmac_sha256(password, u)
-			for k in 0 .. u.len {
-				t[k] ^= u[k]
-			}
-		}
-		
-		derived << t
-	}
-	
-	if derived.len > key_length {
-		return derived[..key_length]
-	}
-	return derived
-}
 
 // scrypt_string derives a key from a password string using scrypt
 pub fn scrypt_string(password string, salt []u8, params ScryptParameters, key_length int) []u8 {
@@ -206,17 +177,6 @@ pub fn scrypt_verify_string(password string, derived_key []u8, salt []u8, params
 	return scrypt_verify(password.bytes(), derived_key, salt, params)
 }
 
-// constant_time_compare compares two byte slices in constant time
-fn constant_time_compare(a []u8, b []u8) bool {
-	if a.len != b.len {
-		return false
-	}
-	mut result := u8(0)
-	for i in 0 .. a.len {
-		result |= a[i] ^ b[i]
-	}
-	return result == 0
-}
 
 // is_power_of_two checks if a number is a power of two
 fn is_power_of_two(n int) bool {

@@ -59,6 +59,7 @@ mut:
 	server_random  []u8
 	
 	// TLS 1.3 Secrets
+	early_secret                      []u8
 	shared_secret                     []u8
 	handshake_secret                  []u8
 	client_handshake_traffic_secret   []u8
